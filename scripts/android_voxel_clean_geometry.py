@@ -73,10 +73,7 @@ old_start = """    sBuildShapes = CurrentShapes();
 """
 new_start = """    sBuildShapes = CurrentShapes();
     const bool outdoors = (gArea.areaMetadata & AR_IS_OVERWORLD) != 0;
-    /* Interior wall art already encodes much of its apparent height. A two-tile
-     * default stands the same facade up twice and creates the doubled wall /
-     * doorway look visible at steep pitches. Outdoors keep two tiles for cliffs. */
-    const int wallTiles = sBuildShapes ? sBuildShapes->wall : (outdoors ? kDefaultWallTiles : 1);
+    const int wallTiles = sBuildShapes ? sBuildShapes->wall : kDefaultWallTiles;
     sPropCount = 0;
     std::memset(sMaskPixels, 0, sizeof(sMaskPixels));
     const int W = gRoomControls.width / 16, H = gRoomControls.height / 16;
@@ -185,22 +182,6 @@ src = src.replace(old_dirty, new_dirty, 1)
 
 # Indoor art already contains the facade depth. Keep indoor walls thin and
 # anchored to their native collision row instead of shifting a second copy south.
-old_foot = """            rn.foot = len > rn.face ? (yt == 0 ? 0 : yt + rn.face) : yb;
-"""
-new_foot = """            rn.foot = outdoors ? (len > rn.face ? (yt == 0 ? 0 : yt + rn.face) : yb) : yb;
-"""
-if old_foot not in src:
-    raise SystemExit("wall footprint block not found")
-src = src.replace(old_foot, new_foot, 1)
-
-old_thin = """        const bool thin = yb - yt + 1 <= face; /* all face: 8px-deep cap */
-"""
-new_thin = """        const bool thin = !outdoors || yb - yt + 1 <= face; /* interiors are thin walls, not duplicated facades */
-"""
-if old_thin not in src:
-    raise SystemExit("thin wall block not found")
-src = src.replace(old_thin, new_thin, 1)
-
 # Multi-tile trees/log piles/cliffs must remain closed solid geometry. The
 # silhouette mask was carving their dark outline pixels into see-through slits.
 old_masks = """        Uint32 rowMask[64] = {};
@@ -218,21 +199,6 @@ new_masks = """        Uint32 rowMask[64] = {};
 if old_masks not in src:
     raise SystemExit("run silhouette-mask block not found")
 src = src.replace(old_masks, new_masks, 1)
-
-# A non-solid gap between solid wall tiles is a doorway/opening. Keep its
-# overhead decoration out of the raised world geometry so the opening remains clean.
-old_cover = """                if (Cover(x, y)) {
-                    int clear = 0;
-"""
-new_cover = """                const bool doorwayGap =
-                    !solid[t] && ((Geom(x - 1, y) && Geom(x + 1, y)) ||
-                                  (Geom(x, y - 1) && Geom(x, y + 1)));
-                if (Cover(x, y) && !doorwayGap) {
-                    int clear = 0;
-"""
-if old_cover not in src:
-    raise SystemExit("floor cover block not found")
-src = src.replace(old_cover, new_cover, 1)
 
 # ---------------------------------------------------------------------------
 # 3. Do not clone edge walls/trees/cliffs 24 tiles into the distance.
@@ -300,6 +266,12 @@ new_margin = """    /*
 if old_margin not in src:
     raise SystemExit("outdoor repeated-edge margin block not found")
 src = src.replace(old_margin, new_margin, 1)
+
+# Requested Android default: one tile high everywhere unless an area override explicitly changes it.
+old_default_height = "constexpr int kDefaultWallTiles = 2;"
+if old_default_height not in src:
+    raise SystemExit("default wall height constant not found")
+src = src.replace(old_default_height, "constexpr int kDefaultWallTiles = 1;", 1)
 
 path.write_text(src, encoding="utf-8")
 print("Applied stable 3D scene latch and conservative clean geometry")
