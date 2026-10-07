@@ -39,7 +39,7 @@ PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
 bool sTouchEnabled = true;
 #endif
 float sTouchScale = 1.0f;   /* multiplies the touch layout unit  */
-float sTouchOpacity = 0.82f; /* phone default: visible without covering art */
+float sTouchOpacity = 1.0f; /* phone default: clear, high-contrast controls */
 """, 1)
 
 src = src.replace(
@@ -65,7 +65,7 @@ src = src.replace(
         }
         sTouchEnabled = JsonValue(j, "touch_enabled", true);
         sTouchScale = std::min(1.6f, std::max(0.6f, JsonValue(j, "touch_scale", 1.0f)));
-        sTouchOpacity = std::min(1.5f, std::max(0.3f, JsonValue(j, "touch_opacity", 0.82f)));
+        sTouchOpacity = std::min(1.5f, std::max(0.3f, JsonValue(j, "touch_opacity", 1.0f)));
 """, 1)
 
 anchor = """extern "C" PortTouchScheme Port_Config_TouchScheme(void) {
@@ -130,6 +130,14 @@ migration_new = """    try {
         sColorCorrect = true;
         sConfigJson["color_correction"] = true;
         sConfigJson["android_color_correction_default_version"] = 1;
+        SaveConfig();
+    }
+
+    if (!sConfigJson.contains("android_touch_visibility_version")) {
+        if (sTouchOpacity < 1.0f)
+            sTouchOpacity = 1.0f;
+        sConfigJson["touch_opacity"] = sTouchOpacity;
+        sConfigJson["android_touch_visibility_version"] = 1;
         SaveConfig();
     }
 #endif
