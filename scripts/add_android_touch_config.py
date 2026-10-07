@@ -26,6 +26,7 @@ src = src.replace(
 """#ifdef __ANDROID__
     j["touch_scheme"] = "dpad";
     j["touch_enabled"] = true;
+    j["android_touch_layout_version"] = 1;
 #else
     j["touch_scheme"] = "joystick";
     j["touch_enabled"] = true;
@@ -63,6 +64,49 @@ extern "C" void Port_Config_SetTouchEnabled(bool enabled) {
 }
 
 """, 1)
+
+migration_anchor = """    try {
+        apply(j);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[CONFIG] Malformed config.json (%s); falling back to defaults.\\n", e.what());
+        const nlohmann::json def = DefaultsJson();
+        sConfigJson = def;
+        apply(def); /* defaults are well-typed and cannot throw */
+    }
+}
+"""
+
+migration_new = """    try {
+        apply(j);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[CONFIG] Malformed config.json (%s); falling back to defaults.\\n", e.what());
+        const nlohmann::json def = DefaultsJson();
+        sConfigJson = def;
+        apply(def); /* defaults are well-typed and cannot throw */
+    }
+
+#ifdef __ANDROID__
+    /*
+     * One-time migration for installs created before the phone-native GBA
+     * layout existed. Old configs saved the floating joystick as the default,
+     * so merely changing DefaultsJson would never affect an existing phone.
+     * Migrate once, persist the marker, then always respect the user's choice.
+     */
+    if (!sConfigJson.contains("android_touch_layout_version")) {
+        sTouchScheme = PORT_TOUCH_SCHEME_DPAD;
+        sTouchEnabled = true;
+        sConfigJson["touch_scheme"] = "dpad";
+        sConfigJson["touch_enabled"] = true;
+        sConfigJson["android_touch_layout_version"] = 1;
+        SaveConfig();
+    }
+#endif
+}
+"""
+
+if migration_anchor not in src:
+    raise SystemExit("config load tail anchor not found")
+src = src.replace(migration_anchor, migration_new, 1)
 
 cfg.write_text(src, encoding="utf-8")
 
