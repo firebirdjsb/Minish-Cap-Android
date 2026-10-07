@@ -149,7 +149,7 @@ new_setup_item = """                if (selected) {
                     }
                 }
 
-                if (ImGui::IsItemFocused() && section != i) {
+                if (!sectionChangedExplicitly && ImGui::IsItemFocused() && section != i) {
                     section = i;
                     sectionChanged = true;
                 }
