@@ -82,8 +82,9 @@ jobs:
           "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.gnu_debuglink'
           ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.debug_info'
 
-      - name: Cache Android test signing key
-        uses: actions/cache@v4
+      - name: Restore Android test signing key
+        id: signing-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.android/minish-cap-s24-test.keystore
           key: minish-cap-android-s24-signing-v2
@@ -108,6 +109,13 @@ jobs:
             echo "TMC_KEY_PASSWORD=android"
           } >> "$GITHUB_ENV"
 
+      - name: Save Android test signing key
+        if: steps.signing-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/minish-cap-s24-test.keystore
+          key: minish-cap-android-s24-signing-v2
+
       - name: Build release APK
         shell: bash
         working-directory: upstream/tmc/android
@@ -125,7 +133,7 @@ jobs:
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "$APK"
 
-          APK_CERT=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:lower:]' '[:upper:]')
+          APK_CERT=$("$BT/apksigner" verify --print-certs "$APK"             | sed -n 's/.*certificate SHA-256 digest: //p'             | head -n 1             | tr -d ':'             | tr '[:lower:]' '[:upper:]')
           KS_CERT=$(keytool -list -v             -keystore "$TMC_KEYSTORE_FILE"             -storepass "$TMC_KEYSTORE_PASSWORD"             -alias "$TMC_KEY_ALIAS"             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if [[ -z "$APK_CERT" || -z "$KS_CERT" || "$APK_CERT" != "$KS_CERT" ]]; then
             echo "::error::APK certificate does not match the persisted CI signing key"
