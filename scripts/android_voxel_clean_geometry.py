@@ -143,19 +143,15 @@ old_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
     const bool obj1d = (gIoMem[0] & 0x40) != 0;
 """
 new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
-    const float rawScrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
-    const float rawScrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
+    /*
+     * Always follow the live camera. Freezing scroll while BottomMapShown()
+     * briefly misses makes the world pause for a few refreshes and then jump,
+     * which is the visible movement stutter from the S24 capture. Geometry may
+     * stay cached during the transient miss, but camera motion must not.
+     */
+    const float scrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
+    const float scrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
     const bool roomMapStable = BottomMapShown();
-    static float stableScrollX = 0.0f, stableScrollY = 0.0f;
-    static bool haveStableRoomFrame = false;
-    if (roomMapStable || !haveStableRoomFrame) {
-        stableScrollX = rawScrollX;
-        stableScrollY = rawScrollY;
-        if (roomMapStable)
-            haveStableRoomFrame = true;
-    }
-    const float scrollX = haveStableRoomFrame ? stableScrollX : rawScrollX;
-    const float scrollY = haveStableRoomFrame ? stableScrollY : rawScrollY;
     const bool obj1d = (gIoMem[0] & 0x40) != 0;
 """
 if old_scroll not in src:
@@ -168,9 +164,9 @@ old_dirty = """    bool mapDirty = mapKey != sMapKey;
     else if (sSettleFrames > 0 && --sSettleFrames == 0)
         mapDirty = true;
 """
-new_dirty = """    bool mapDirty = roomMapStable ? (mapKey != sMapKey) : false;
-    if (!haveStableRoomFrame)
-        mapDirty = mapKey != sMapKey;
+new_dirty = """    /* Keep the last complete room mesh while the BG probe is transiently
+     * unstable, but continue moving that mesh with the live camera above. */
+    bool mapDirty = roomMapStable ? (mapKey != sMapKey) : (sMapVertCount == 0);
     if (mapDirty)
         sSettleFrames = 20;
     else if (roomMapStable && sSettleFrames > 0 && --sSettleFrames == 0)
