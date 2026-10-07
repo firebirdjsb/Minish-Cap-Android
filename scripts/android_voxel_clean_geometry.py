@@ -18,38 +18,18 @@ old_scene = """bool SceneApplicable(void) {
 
 new_scene = """bool SceneApplicable(void) {
     const bool structural =
-        gMain.task == TASK_GAME && gMain.state == GAMETASK_MAIN && gMain.substate != GAMEMAIN_SUBTASK &&
-        gMapBottom.bgSettings != nullptr && gRoomControls.width != 0 && gRoomControls.width <= 1024 &&
-        gRoomControls.height <= 1024 &&
+        gMain.task == TASK_GAME && gMain.state == GAMETASK_MAIN &&
+        gMapBottom.bgSettings != nullptr && gRoomControls.width != 0 &&
+        gRoomControls.width <= 1024 && gRoomControls.height <= 1024 &&
         !(gRoomControls.area == AREA_BEANSTALKS && (gRoomControls.scroll_flags & 1));
 
     static bool latched = false;
     static Uint64 missSinceMs = 0;
-    static int lastArea = -1;
-    static int lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
 
     if (!structural) {
         latched = false;
         missSinceMs = 0;
-        lastArea = -1;
         return false;
-    }
-
-    const bool roomChanged =
-        lastArea != gRoomControls.area ||
-        lastOriginX != gRoomControls.origin_x ||
-        lastOriginY != gRoomControls.origin_y ||
-        lastW != gRoomControls.width ||
-        lastH != gRoomControls.height;
-
-    if (roomChanged) {
-        latched = false;
-        missSinceMs = 0;
-        lastArea = gRoomControls.area;
-        lastOriginX = gRoomControls.origin_x;
-        lastOriginY = gRoomControls.origin_y;
-        lastW = gRoomControls.width;
-        lastH = gRoomControls.height;
     }
 
     if (BottomMapShown()) {
@@ -59,19 +39,16 @@ new_scene = """bool SceneApplicable(void) {
     }
 
     /*
-     * MapShownPct() is sampled from live BG state and can transiently fall
-     * below its threshold while scrolling/HDMA updates land. Once a real room
-     * has entered 3D, hold the 3D presenter through short misses instead of
-     * flashing the normal 2D frame for one refresh.
+     * The native room/BG state can be incomplete for several render ticks
+     * during camera scrolls and room seams. Once 3D owns gameplay, do not
+     * bounce to the normal 2D presenter just because the live BG match probe
+     * misses briefly. A real non-game scene releases the latch above.
      */
     if (latched) {
         const Uint64 now = SDL_GetTicks();
         if (missSinceMs == 0)
             missSinceMs = now;
-        /* A real scene transition stays mismatched; a scrolling/HDMA hiccup
-         * lasts only a frame or two. Time-based hysteresis is independent of
-         * how many subsystems query SceneApplicable() in one render tick. */
-        if (now - missSinceMs < 750)
+        if (now - missSinceMs < 1200)
             return true;
     }
 
@@ -151,18 +128,111 @@ old_prop = """        if (ov != PORT_VOXEL_SHAPE_PROP && (Geom(x, y - 1) || Geom
             return false;
         if (!BuildPropMask(x, y, sPropCount, bChar, b8 != 0))
 """
-new_prop = """        if (ov != PORT_VOXEL_SHAPE_PROP) {
-            const int solidNeighbours =
-                (Geom(x, y - 1) ? 1 : 0) + (Geom(x, y + 1) ? 1 : 0) +
-                (Geom(x - 1, y) ? 1 : 0) + (Geom(x + 1, y) ? 1 : 0);
-            if (solidNeighbours >= 2)
-                return false;
-        }
+new_prop = """        if (ov != PORT_VOXEL_SHAPE_PROP &&
+            (Geom(x, y - 1) || Geom(x, y + 1) || Geom(x - 1, y) || Geom(x + 1, y)))
+            return false;
         if (!BuildPropMask(x, y, sPropCount, bChar, b8 != 0))
 """
 if old_prop not in src:
     raise SystemExit("isProp neighbour block not found")
 src = src.replace(old_prop, new_prop, 1)
+
+# ---------------------------------------------------------------------------
+# 2b. Keep the stable 3D scene frozen during transient BG/room hand-off frames.
+# ---------------------------------------------------------------------------
+old_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
+    const float scrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
+    const float scrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
+    const bool obj1d = (gIoMem[0] & 0x40) != 0;
+"""
+new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
+    const float rawScrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
+    const float rawScrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
+    const bool roomMapStable = BottomMapShown();
+    static float stableScrollX = 0.0f, stableScrollY = 0.0f;
+    static bool haveStableRoomFrame = false;
+    if (roomMapStable || !haveStableRoomFrame) {
+        stableScrollX = rawScrollX;
+        stableScrollY = rawScrollY;
+        if (roomMapStable)
+            haveStableRoomFrame = true;
+    }
+    const float scrollX = haveStableRoomFrame ? stableScrollX : rawScrollX;
+    const float scrollY = haveStableRoomFrame ? stableScrollY : rawScrollY;
+    const bool obj1d = (gIoMem[0] & 0x40) != 0;
+"""
+if old_scroll not in src:
+    raise SystemExit("voxel scroll block not found")
+src = src.replace(old_scroll, new_scroll, 1)
+
+old_dirty = """    bool mapDirty = mapKey != sMapKey;
+    if (mapDirty)
+        sSettleFrames = 20;
+    else if (sSettleFrames > 0 && --sSettleFrames == 0)
+        mapDirty = true;
+"""
+new_dirty = """    bool mapDirty = roomMapStable ? (mapKey != sMapKey) : false;
+    if (!haveStableRoomFrame)
+        mapDirty = mapKey != sMapKey;
+    if (mapDirty)
+        sSettleFrames = 20;
+    else if (roomMapStable && sSettleFrames > 0 && --sSettleFrames == 0)
+        mapDirty = true;
+"""
+if old_dirty not in src:
+    raise SystemExit("voxel mapDirty block not found")
+src = src.replace(old_dirty, new_dirty, 1)
+
+# Indoor art already contains the facade depth. Keep indoor walls thin and
+# anchored to their native collision row instead of shifting a second copy south.
+old_foot = """            rn.foot = len > rn.face ? (yt == 0 ? 0 : yt + rn.face) : yb;
+"""
+new_foot = """            rn.foot = outdoors ? (len > rn.face ? (yt == 0 ? 0 : yt + rn.face) : yb) : yb;
+"""
+if old_foot not in src:
+    raise SystemExit("wall footprint block not found")
+src = src.replace(old_foot, new_foot, 1)
+
+old_thin = """        const bool thin = yb - yt + 1 <= face; /* all face: 8px-deep cap */
+"""
+new_thin = """        const bool thin = !outdoors || yb - yt + 1 <= face; /* interiors are thin walls, not duplicated facades */
+"""
+if old_thin not in src:
+    raise SystemExit("thin wall block not found")
+src = src.replace(old_thin, new_thin, 1)
+
+# Multi-tile trees/log piles/cliffs must remain closed solid geometry. The
+# silhouette mask was carving their dark outline pixels into see-through slits.
+old_masks = """        Uint32 rowMask[64] = {};
+        bool anyMask = false;
+        if (outdoors && !rn.ledge)
+            for (int r = yt; r <= yb; ++r)
+                anyMask |= (rowMask[r] = Foliage(x, r) ? silhouette(x, r) : 0u) != 0;
+"""
+new_masks = """        Uint32 rowMask[64] = {};
+        bool anyMask = false;
+        /* Keep multi-tile scenery closed. Per-pixel cutout masks are reserved
+         * for isolated props; on tree/log/cliff runs they create missing tops
+         * and thin transparent strips at perspective angles. */
+"""
+if old_masks not in src:
+    raise SystemExit("run silhouette-mask block not found")
+src = src.replace(old_masks, new_masks, 1)
+
+# A non-solid gap between solid wall tiles is a doorway/opening. Keep its
+# overhead decoration out of the raised world geometry so the opening remains clean.
+old_cover = """                if (Cover(x, y)) {
+                    int clear = 0;
+"""
+new_cover = """                const bool doorwayGap =
+                    !solid[t] && ((Geom(x - 1, y) && Geom(x + 1, y)) ||
+                                  (Geom(x, y - 1) && Geom(x, y + 1)));
+                if (Cover(x, y) && !doorwayGap) {
+                    int clear = 0;
+"""
+if old_cover not in src:
+    raise SystemExit("floor cover block not found")
+src = src.replace(old_cover, new_cover, 1)
 
 # ---------------------------------------------------------------------------
 # 3. Do not clone edge walls/trees/cliffs 24 tiles into the distance.
