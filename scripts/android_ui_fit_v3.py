@@ -4,6 +4,41 @@ from pathlib import Path
 menu = Path("upstream/tmc/port/port_imgui_menu.cpp")
 src = menu.read_text(encoding="utf-8")
 
+main_shoulder_marker = """    if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false)) {
+        category = (category + 1) % kCount;
+        categoryChanged = true;
+    }
+
+    const bool popupOpen ="""
+main_shoulder_replacement = """    if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false)) {
+        category = (category + 1) % kCount;
+        categoryChanged = true;
+    }
+    const bool categoryChangedByShoulder = categoryChanged;
+
+    const bool popupOpen ="""
+if main_shoulder_marker not in src:
+    raise SystemExit("main category shoulder-navigation anchor not found")
+src = src.replace(main_shoulder_marker, main_shoulder_replacement, 1)
+
+# Guard shoulder-driven section changes from being overwritten by stale ImGui focus.
+setup_shoulder_marker = """    if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false)) {
+        section = (section + 1) % kSectionCount;
+        sectionChanged = true;
+    }
+
+    const bool popupOpen ="""
+setup_shoulder_replacement = """    if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false)) {
+        section = (section + 1) % kSectionCount;
+        sectionChanged = true;
+    }
+    const bool sectionChangedExplicitly = sectionChanged;
+
+    const bool popupOpen ="""
+if setup_shoulder_marker not in src:
+    raise SystemExit("file-setup shoulder-navigation anchor not found")
+src = src.replace(setup_shoulder_marker, setup_shoulder_replacement, 1)
+
 # ---------------------------------------------------------------------------
 # Main Android settings category rail: explicit full-width buttons.
 # This avoids Selectable label clipping seen on high-DPI Samsung landscape.
@@ -48,7 +83,7 @@ new_main_item = """                if (selected) {
                 /* D-pad/stick focus movement immediately selects the category.
                  * This makes the left rail fully controller-driven without
                  * requiring an extra A press just to reveal a page. */
-                if (ImGui::IsItemFocused() && category != i) {
+                if (!categoryChangedByShoulder && ImGui::IsItemFocused() && category != i) {
                     category = i;
                     categoryChanged = true;
                 }
@@ -92,7 +127,7 @@ old_setup_item = """                if (selected) {
 
                 /* Also make ordinary D-pad navigation on the section rail
                  * immediately switch the right pane, not just move a highlight. */
-                if (ImGui::IsItemFocused() && section != i) {
+                if (!sectionChangedExplicitly && ImGui::IsItemFocused() && section != i) {
                     section = i;
                     sectionChanged = true;
                 }
