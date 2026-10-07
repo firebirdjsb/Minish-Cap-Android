@@ -24,13 +24,13 @@ new_scene = """bool SceneApplicable(void) {
         !(gRoomControls.area == AREA_BEANSTALKS && (gRoomControls.scroll_flags & 1));
 
     static bool latched = false;
-    static int missFrames = 0;
+    static Uint64 missSinceMs = 0;
     static int lastArea = -1;
     static int lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
 
     if (!structural) {
         latched = false;
-        missFrames = 0;
+        missSinceMs = 0;
         lastArea = -1;
         return false;
     }
@@ -44,7 +44,7 @@ new_scene = """bool SceneApplicable(void) {
 
     if (roomChanged) {
         latched = false;
-        missFrames = 0;
+        missSinceMs = 0;
         lastArea = gRoomControls.area;
         lastOriginX = gRoomControls.origin_x;
         lastOriginY = gRoomControls.origin_y;
@@ -54,7 +54,7 @@ new_scene = """bool SceneApplicable(void) {
 
     if (BottomMapShown()) {
         latched = true;
-        missFrames = 0;
+        missSinceMs = 0;
         return true;
     }
 
@@ -64,12 +64,19 @@ new_scene = """bool SceneApplicable(void) {
      * has entered 3D, hold the 3D presenter through short misses instead of
      * flashing the normal 2D frame for one refresh.
      */
-    if (latched && missFrames < 30) {
-        ++missFrames;
-        return true;
+    if (latched) {
+        const Uint64 now = SDL_GetTicks();
+        if (missSinceMs == 0)
+            missSinceMs = now;
+        /* A real scene transition stays mismatched; a scrolling/HDMA hiccup
+         * lasts only a frame or two. Time-based hysteresis is independent of
+         * how many subsystems query SceneApplicable() in one render tick. */
+        if (now - missSinceMs < 750)
+            return true;
     }
 
     latched = false;
+    missSinceMs = 0;
     return false;
 }
 """
