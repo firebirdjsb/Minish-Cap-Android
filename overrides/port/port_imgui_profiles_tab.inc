@@ -3,6 +3,11 @@
 
 #include <SDL3/SDL_dialog.h>
 
+extern "C" {
+int Port_Save_ImportProfileBytes(const void* bytes, size_t len, char* outPath, size_t outPathLen);
+int Port_Save_ExportCurrentBytes(void* outBytes, size_t outLen);
+}
+
 /* Android/desktop save transfer. SDL3's file-dialog backend returns content://
  * URIs on Android; SDL_LoadFile / SDL_SaveFile route those through the
  * ContentResolver, so this works without broad storage permissions. */
@@ -51,56 +56,6 @@ static void SDLCALL ProfileExportDialogCallback(void*, const char* const* fileli
     SDL_SetAtomicInt(&sProfileExportStatus, PROFILE_TRANSFER_SELECTED);
 }
 
-static bool ProfileHasKnownSignature(const unsigned char* image) {
-    static const char kUsa[] = "AGBZELDA:THE MINISH CAP:ZELDA 5";
-    static const char kEuJp[] = "AGBZELDA:THE MINISH CAP:ZELDA 3";
-    constexpr size_t kSigLen = sizeof(kUsa) - 1;
-    return std::memcmp(image, kUsa, kSigLen) == 0 ||
-           std::memcmp(image, kEuJp, kSigLen) == 0 ||
-           std::memcmp(image + 0x1000, kUsa, kSigLen) == 0 ||
-           std::memcmp(image + 0x1000, kEuJp, kSigLen) == 0;
-}
-
-static void ProfileReverseEepromBlocks(unsigned char* image) {
-    for (size_t b = 0; b < 0x2000; b += 8) {
-        for (size_t i = 0; i < 4; ++i) {
-            const unsigned char t = image[b + i];
-            image[b + i] = image[b + 7 - i];
-            image[b + 7 - i] = t;
-        }
-    }
-}
-
-static bool ProfileValidateImportedSave(const void* bytes, size_t len) {
-    if (!bytes || len < 0x2000)
-        return false;
-
-    const unsigned char* src = static_cast<const unsigned char*>(bytes);
-    for (size_t i = 0x2000; i < len; ++i) {
-        if (src[i] != 0xFF)
-            return false;
-    }
-
-    if (ProfileHasKnownSignature(src))
-        return true;
-
-    unsigned char converted[0x2000];
-    std::memcpy(converted, src, sizeof(converted));
-    ProfileReverseEepromBlocks(converted);
-    return ProfileHasKnownSignature(converted);
-}
-
-static bool ProfileFindFreeImportName(char out[64]) {
-    for (int i = 1; i <= 99; ++i) {
-        std::snprintf(out, 64, "tmc_import_%d.sav", i);
-        FILE* probe = std::fopen(out, "rb");
-        if (!probe)
-            return true;
-        std::fclose(probe);
-    }
-    return false;
-}
-
 static void ProfileProcessImportResult(void) {
     const int status = SDL_GetAtomicInt(&sProfileImportStatus);
     if (status == PROFILE_TRANSFER_SELECTED) {
@@ -108,26 +63,15 @@ static void ProfileProcessImportResult(void) {
         void* bytes = SDL_LoadFile(sProfileImportUri, &len);
         if (!bytes) {
             Port_DebugMenu_ToastFromExternal("Import failed: could not read selected file");
-        } else if (!ProfileValidateImportedSave(bytes, len)) {
-            Port_DebugMenu_ToastFromExternal("Import refused: not a valid Minish Cap save");
         } else {
-            char name[64];
-            if (!ProfileFindFreeImportName(name)) {
-                Port_DebugMenu_ToastFromExternal("Import failed: no free import profile slots");
+            char name[64] = {};
+            if (Port_Save_ImportProfileBytes(bytes, len, name, sizeof(name))) {
+                char msg[128];
+                std::snprintf(msg, sizeof(msg), "Imported as %s - Activate it, then return to title", name);
+                Port_DebugMenu_ToastFromExternal(msg);
             } else {
-                FILE* out = std::fopen(name, "wb");
-                bool ok = false;
-                if (out) {
-                    ok = std::fwrite(bytes, 1, 0x2000, out) == 0x2000;
-                    ok = (std::fclose(out) == 0) && ok;
-                }
-                if (ok) {
-                    char msg[128];
-                    std::snprintf(msg, sizeof(msg), "Imported as %s - Activate it, then return to title", name);
-                    Port_DebugMenu_ToastFromExternal(msg);
-                } else {
-                    Port_DebugMenu_ToastFromExternal("Import failed: could not create profile");
-                }
+                Port_DebugMenu_ToastFromExternal(
+                    "Import refused: corrupt/unsupported save or no free import profile slot");
             }
         }
         if (bytes)
@@ -142,19 +86,7 @@ static void ProfileProcessImportResult(void) {
 }
 
 static bool ProfileSnapshotForExport(void) {
-    static const char* kTemp = "tmc_export_tmp.sav";
-    if (!Port_Save_SaveAsProfile(kTemp))
-        return false;
-
-    FILE* in = std::fopen(kTemp, "rb");
-    bool ok = false;
-    if (in) {
-        ok = std::fread(sProfileExportBytes, 1, sizeof(sProfileExportBytes), in) ==
-             sizeof(sProfileExportBytes);
-        std::fclose(in);
-    }
-    std::remove(kTemp);
-    return ok;
+    return Port_Save_ExportCurrentBytes(sProfileExportBytes, sizeof(sProfileExportBytes)) != 0;
 }
 
 static void ProfileProcessExportResult(void) {
