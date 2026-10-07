@@ -31,6 +31,7 @@ python3 "$ROOT/scripts/android_controller_stick_nav.py"
 python3 "$ROOT/scripts/android_menu_layout_v2.py"
 python3 "$ROOT/scripts/android_ui_fit_v3.py"
 python3 "$ROOT/scripts/fix_android_single_screen_present.py"
+python3 "$ROOT/scripts/android_fullscreen_widescreen.py"
 
 echo
 echo "Android source prepared."
