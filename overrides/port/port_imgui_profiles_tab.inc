@@ -116,11 +116,11 @@ static void ProfileProcessImportResult(void) {
                 Port_DebugMenu_ToastFromExternal("Import failed: no free import profile slots");
             } else {
                 FILE* out = std::fopen(name, "wb");
-                const bool ok = out &&
-                    std::fwrite(bytes, 1, 0x2000, out) == 0x2000 &&
-                    std::fclose(out) == 0;
-                if (out && !ok)
-                    std::fclose(out);
+                bool ok = false;
+                if (out) {
+                    ok = std::fwrite(bytes, 1, 0x2000, out) == 0x2000;
+                    ok = (std::fclose(out) == 0) && ok;
+                }
                 if (ok) {
                     char msg[128];
                     std::snprintf(msg, sizeof(msg), "Imported as %s - Activate it, then return to title", name);
