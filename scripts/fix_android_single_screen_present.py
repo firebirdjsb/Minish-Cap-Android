@@ -51,4 +51,63 @@ if old not in src:
     raise SystemExit("expected background-fill present block not found")
 
 path.write_text(src.replace(old, new, 1), encoding="utf-8")
-print("Disabled duplicate-frame ambient fill on Android")
+
+gpu_path = Path("upstream/tmc/port/port_gpu_renderer.cpp")
+gpu = gpu_path.read_text(encoding="utf-8")
+
+gpu_old = """    if (Port_Config_BgFill() == PORT_BG_FILL_BLURRED_FRAME && (stageW != frameW || stageH != frameH)) {
+        SDL_GPUViewport vp = {};
+        vp.x = (float)stageX;
+        vp.y = (float)stageY;
+        vp.w = (float)stageW;
+        vp.h = (float)stageH;
+        vp.min_depth = 0.0f;
+        vp.max_depth = 1.0f;
+        SDL_SetGPUViewport(rp, &vp);
+        SDL_BindGPUGraphicsPipeline(rp, sPipelines[PORT_GPU_FILTER_NONE]);
+
+        SDL_GPUTextureSamplerBinding tsb_bg = {};
+        tsb_bg.texture = sSourceTexture;
+        tsb_bg.sampler = sSamplerLinear; /* Blurred halo always uses linear */
+        SDL_BindGPUFragmentSamplers(rp, 0, &tsb_bg, 1);
+
+        SDL_DrawGPUPrimitives(rp, /*num_vertices=*/4, /*num_instances=*/1, 0, 0);
+    }
+"""
+
+gpu_new = """#ifndef __ANDROID__
+    if (Port_Config_BgFill() == PORT_BG_FILL_BLURRED_FRAME && (stageW != frameW || stageH != frameH)) {
+        SDL_GPUViewport vp = {};
+        vp.x = (float)stageX;
+        vp.y = (float)stageY;
+        vp.w = (float)stageW;
+        vp.h = (float)stageH;
+        vp.min_depth = 0.0f;
+        vp.max_depth = 1.0f;
+        SDL_SetGPUViewport(rp, &vp);
+        SDL_BindGPUGraphicsPipeline(rp, sPipelines[PORT_GPU_FILTER_NONE]);
+
+        SDL_GPUTextureSamplerBinding tsb_bg = {};
+        tsb_bg.texture = sSourceTexture;
+        tsb_bg.sampler = sSamplerLinear; /* Desktop ambient fill only */
+        SDL_BindGPUFragmentSamplers(rp, 0, &tsb_bg, 1);
+
+        SDL_DrawGPUPrimitives(rp, /*num_vertices=*/4, /*num_instances=*/1, 0, 0);
+    }
+#else
+    /*
+     * Android single-screen policy: the old ambient backdrop drew the same
+     * source frame a second time across the full stage. On a 19.5:9 phone
+     * this presents as duplicate game screens to the left/right of the real
+     * aspect-correct frame. The swapchain was already cleared to black, so
+     * skip the backdrop and leave clean bars around the one real frame.
+     */
+#endif
+"""
+
+if gpu_old not in gpu:
+    raise SystemExit("expected SDL_GPU blurred-frame backdrop block not found")
+
+gpu_path.write_text(gpu.replace(gpu_old, gpu_new, 1), encoding="utf-8")
+
+print("Disabled duplicate-frame ambient fill on Android (SDL_Renderer + SDL_GPU)")
