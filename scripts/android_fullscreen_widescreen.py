@@ -37,7 +37,7 @@ edge_block = r'''#ifdef __ANDROID__
         if (Port_Config_WidescreenEnabled() && (dst.x > stage.x || dst.x + dst.w < stage.x + stage.w)) {
             float tw = 0.0f, th = 0.0f;
             if (SDL_GetTextureSize(tex, &tw, &th) && tw > 1.0f && th > 1.0f) {
-                const float edgePx = std::max(1.0f, tw * 0.045f);
+                const float edgePx = (tw * 0.045f > 1.0f) ? (tw * 0.045f) : 1.0f;
                 Port_PPU_SetTextureScaleModeCached(tex, SDL_SCALEMODE_LINEAR);
 
                 if (dst.x > stage.x) {
