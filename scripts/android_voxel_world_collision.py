@@ -8,7 +8,7 @@ src = vox.read_text(encoding="utf-8")
 stub_anchor = """void Port_Voxel_RequestShot(const char*) {
 }
 """
-stub_repl = stub_anchor + """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int, int) {
+stub_repl = stub_anchor + """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int, int, int) {
     return false;
 }
 """
@@ -21,7 +21,7 @@ src = src.replace(stub_anchor, stub_repl, 1)
 state_anchor = """const AreaShapes* sBuildShapes = nullptr; /* CurrentShapes() for the BuildMap in progress */
 """
 state_repl = state_anchor + """
-static Uint8 sVoxelSolid[64 * 64] = {};
+static Uint8 sVoxelFrontFace[64 * 64] = {};
 static float sVoxelHeight[64 * 64] = {};
 static int sVoxelW = 0, sVoxelH = 0;
 static int sVoxelOriginX = 0, sVoxelOriginY = 0;
@@ -69,14 +69,19 @@ height_repl = """    sVoxelW = W;
     sVoxelOriginX = gRoomControls.origin_x;
     sVoxelOriginY = gRoomControls.origin_y;
     sVoxelArea = gRoomControls.area;
-    std::memset(sVoxelSolid, 0, sizeof(sVoxelSolid));
+    std::memset(sVoxelFrontFace, 0, sizeof(sVoxelFrontFace));
     std::memset(sVoxelHeight, 0, sizeof(sVoxelHeight));
     for (int cy = 0; cy < H; ++cy)
-        for (int cx = 0; cx < W; ++cx) {
-            const int ctile = cy * 64 + cx;
-            sVoxelSolid[ctile] = (kind[ctile] == 1 || kind[ctile] == 2) ? 1 : 0;
-            sVoxelHeight[ctile] = hmap[ctile];
-        }
+        for (int cx = 0; cx < W; ++cx)
+            sVoxelHeight[cy * 64 + cx] = hmap[cy * 64 + cx];
+
+    /* Supplemental collision follows the wall face that is actually rendered,
+     * not every bottom-layer solid tile. This avoids blocking legitimate
+     * top-layer/stair movement while still keeping Link out of a tilted wall. */
+    for (const Run& rn : runs)
+        if (rn.x >= 0 && rn.x < W && rn.yb >= 0 && rn.yb < H)
+            sVoxelFrontFace[rn.yb * 64 + rn.x] = 1;
+
     sVoxelCollisionValid = true;
 
     auto hAt = [&](int x, int b) { return inRoom(x, b) ? hmap[b * 64 + x] : 0.0f; };
@@ -100,7 +105,8 @@ sprite_repl = """        const float x0 = o.x + scrollX, x1 = x0 + o.w;
         const float entityCenterX = (x0 + x1) * 0.5f;
         const float groundHeight = WorldHeightAt(entityCenterX + gRoomControls.origin_x,
                                                   entityFootZ + gRoomControls.origin_y);
-        const float elev = groundHeight + (tag.layer == 2 ? kTopLayerLift : 0.0f);
+        const float layerHeight = tag.layer == 2 ? kTopLayerLift : 0.0f;
+        const float elev = tag.kind == PORT_VOXEL_OAM_ENTITY ? std::max(groundHeight, layerHeight) : layerHeight;
         float c[4][3];
 """
 if sprite_anchor not in src:
@@ -112,17 +118,42 @@ public_anchor = """int Port_Voxel_CurrentArea(void) {
     return SceneApplicable() ? gRoomControls.area : -1;
 }
 """
-public_repl = """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY) {
+public_repl = """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer) {
     if (!Port_Config_GetVoxelView() || !sVoxelCollisionValid ||
         sVoxelArea != gRoomControls.area ||
         sVoxelOriginX != gRoomControls.origin_x || sVoxelOriginY != gRoomControls.origin_y)
         return false;
 
-    const int tx = (worldX - sVoxelOriginX) >> 4;
-    const int ty = (worldY - sVoxelOriginY) >> 4;
+    /* The renderer infers its walls from the bottom collision map. Never feed
+     * that inferred bottom geometry back into Link while the native game has
+     * moved him onto the top collision layer (stairs, platforms, raised turf). */
+    if (collisionLayer != 1)
+        return false;
+
+    const int relX = worldX - sVoxelOriginX;
+    const int relY = worldY - sVoxelOriginY;
+    if (relX < 0 || relY < 0)
+        return false;
+    const int tx = relX >> 4;
+    const int ty = relY >> 4;
     if (tx < 0 || ty < 0 || tx >= sVoxelW || ty >= sVoxelH)
         return false;
-    return sVoxelSolid[ty * 64 + tx] != 0;
+
+    /* The source wall tile itself is closed in 3D. */
+    if (sVoxelFrontFace[ty * 64 + tx])
+        return true;
+
+    /* A camera-facing billboard leans north as it rises. Keep the player's
+     * hitbox a small pitch-dependent distance south of the rendered wall face,
+     * otherwise Link's upper body can visually pass through the cliff/wall
+     * before his native feet collision reaches the source tile. */
+    if (ty > 0 && sVoxelFrontFace[(ty - 1) * 64 + tx]) {
+        const float pitch = std::abs((float)Port_Config_GetVoxelPitch()) * 3.14159265f / 180.0f;
+        const int clearance = std::clamp((int)std::ceil(std::sin(pitch) * 12.0f), 4, 10);
+        if ((relY & 15) < clearance)
+            return true;
+    }
+    return false;
 }
 
 int Port_Voxel_CurrentArea(void) {
@@ -146,7 +177,7 @@ h_anchor = """void Port_Voxel_RequestShot(const char* path);
 h_repl = """void Port_Voxel_RequestShot(const char* path);
 /* 3D-mode occupancy generated from the exact geometry BuildMap rendered.
  * Native movement keeps its original collision and ORs this only for Link. */
-bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY);
+bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer);
 
 #ifdef __cplusplus
 }
@@ -182,7 +213,7 @@ if calc < 0:
 helper = """#ifdef PC_PORT
 static bool32 Port_EntityTileCollision(Entity* entity, const u8* collisionData, s32 x, s32 y, u32 collisionType) {
     bool32 hit = IsTileCollision(collisionData, x, y, collisionType);
-    if (!hit && entity == &gPlayerEntity.base && Port_Voxel_PlayerSolidAtPixel(x, y))
+    if (!hit && entity == &gPlayerEntity.base && Port_Voxel_PlayerSolidAtPixel(x, y, entity->collisionLayer))
         return TRUE;
     return hit;
 }
@@ -204,4 +235,4 @@ if block == block2:
 m = m[:calc] + block2 + m[end:]
 move.write_text(m, encoding="utf-8")
 
-print("Unified 3D rendered solids/heights with Link collision and entity elevation")
+print("Aligned 3D wall-face clearance with native collision layers and rendered height")
