@@ -82,6 +82,12 @@ jobs:
           "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.gnu_debuglink'
           ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.debug_info'
 
+      - name: Cache Android test signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: minish-cap-android-s24-debug-keystore-v1
+
       - name: Build release APK
         shell: bash
         working-directory: upstream/tmc/android
