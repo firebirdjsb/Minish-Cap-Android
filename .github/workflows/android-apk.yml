@@ -135,8 +135,16 @@ jobs:
 
           APK_CERT=$("$BT/apksigner" verify --print-certs "$APK"             | sed -n 's/.*certificate SHA-256 digest: //p'             | head -n 1             | tr -d ':'             | tr '[:lower:]' '[:upper:]')
           KS_CERT=$(keytool -list -v             -keystore "$TMC_KEYSTORE_FILE"             -storepass "$TMC_KEYSTORE_PASSWORD"             -alias "$TMC_KEY_ALIAS"             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          EXPECTED_CERT="59511A4AA8348F6BE752FC87E807839DC5C5AE95D9772209A5533CF01C32CF38"
           if [[ -z "$APK_CERT" || -z "$KS_CERT" || "$APK_CERT" != "$KS_CERT" ]]; then
             echo "::error::APK certificate does not match the persisted CI signing key"
+            echo "APK=$APK_CERT"
+            echo "KEY=$KS_CERT"
+            exit 1
+          fi
+          if [[ "$APK_CERT" != "$EXPECTED_CERT" || "$KS_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::Android signing identity changed; refusing to publish an update-incompatible APK"
+            echo "EXPECTED=$EXPECTED_CERT"
             echo "APK=$APK_CERT"
             echo "KEY=$KS_CERT"
             exit 1
