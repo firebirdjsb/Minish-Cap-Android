@@ -21,7 +21,7 @@ git -C "$UPSTREAM" reset --hard
 git -C "$UPSTREAM" clean -fd
 
 echo "Applying Android phone overrides..."
-cp -a "$OVERRIDES/android/." "$UPSTREAM/android/"
+cp -a "$OVERRIDES/." "$UPSTREAM/"
 
 echo
 echo "Android source prepared."
