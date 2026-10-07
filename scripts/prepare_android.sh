@@ -24,6 +24,7 @@ echo "Applying Android phone overrides..."
 cp -a "$OVERRIDES/." "$UPSTREAM/"
 python3 "$ROOT/scripts/add_android_save_transfer_api.py"
 python3 "$ROOT/scripts/tune_s24_touch.py"
+python3 "$ROOT/scripts/fix_android_single_screen_present.py"
 
 echo
 echo "Android source prepared."
