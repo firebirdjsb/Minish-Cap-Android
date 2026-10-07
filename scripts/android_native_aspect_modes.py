@@ -128,12 +128,28 @@ migration_old = """    if (!sConfigJson.contains("android_color_correction_defau
         sConfigJson["android_color_correction_default_version"] = 1;
         SaveConfig();
     }
+
+    if (!sConfigJson.contains("android_touch_visibility_version")) {
+        if (sTouchOpacity < 1.0f)
+            sTouchOpacity = 1.0f;
+        sConfigJson["touch_opacity"] = sTouchOpacity;
+        sConfigJson["android_touch_visibility_version"] = 1;
+        SaveConfig();
+    }
 #endif
 """
 migration_new = """    if (!sConfigJson.contains("android_color_correction_default_version")) {
         sColorCorrect = true;
         sConfigJson["color_correction"] = true;
         sConfigJson["android_color_correction_default_version"] = 1;
+        SaveConfig();
+    }
+
+    if (!sConfigJson.contains("android_touch_visibility_version")) {
+        if (sTouchOpacity < 1.0f)
+            sTouchOpacity = 1.0f;
+        sConfigJson["touch_opacity"] = sTouchOpacity;
+        sConfigJson["android_touch_visibility_version"] = 1;
         SaveConfig();
     }
 
