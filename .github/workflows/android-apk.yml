@@ -1,0 +1,89 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - android-s24-single-screen
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout port
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Prepare patched upstream
+        shell: bash
+        run: |
+          bash scripts/prepare_android.sh
+          git -C upstream/tmc submodule sync --recursive
+          git -C upstream/tmc submodule update --init --recursive --depth 1
+          test -d upstream/tmc/libs/VirtuaAPU/src
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: v3.0.8
+          actions-cache-folder: .xmake-cache
+          actions-cache-key: minish-cap-android-arm64
+          package-cache: true
+          package-cache-key: minish-cap-android-arm64
+          project-path: upstream/tmc
+
+      - name: Install Android NDK r26d
+        shell: bash
+        run: |
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264"
+          echo "TMC_NDK=$ANDROID_SDK_ROOT/ndk/26.3.11579264" >> "$GITHUB_ENV"
+
+      - name: Build native ARM64 library
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          xmake f -y -p android -a arm64-v8a --ndk="$TMC_NDK" \
+            --game_version=USA --widescreen_width=384
+          xmake build -y tmc_pc
+          test -f build/android/arm64-v8a/libmain.so
+
+      - name: Build release APK
+        shell: bash
+        working-directory: upstream/tmc/android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Verify APK
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK"
+
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmain.so'
+          if unzip -l "$APK" | grep -q 'lib/x86_64/libmain.so'; then
+            echo "::error::x86_64 unexpectedly packaged in phone-only APK"
+            exit 1
+          fi
+
+          cp "$APK" Minish-Cap-Android-S24-arm64.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minish-Cap-Android-S24-arm64
+          path: upstream/tmc/Minish-Cap-Android-S24-arm64.apk
+          if-no-files-found: error
