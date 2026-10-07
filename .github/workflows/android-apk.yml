@@ -20,15 +20,25 @@ jobs:
       - name: Checkout port
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 1
+
+      - name: Checkout required upstream source
+        shell: bash
+        run: |
+          # Project Picori currently lists two unavailable/private optional
+          # submodules. The Android game build only requires VirtuaAPU, so do
+          # not recurse through every upstream submodule here.
+          git submodule sync -- upstream/tmc
+          git submodule update --init --depth 1 -- upstream/tmc
+          git -C upstream/tmc submodule sync -- libs/VirtuaAPU
+          git -C upstream/tmc submodule update --init --depth 1 -- libs/VirtuaAPU
+          test -d upstream/tmc/libs/VirtuaAPU/src
 
       - name: Prepare patched upstream
         shell: bash
         run: |
           bash scripts/prepare_android.sh
-          git -C upstream/tmc submodule sync --recursive
-          git -C upstream/tmc submodule update --init --recursive --depth 1
           test -d upstream/tmc/libs/VirtuaAPU/src
 
       - name: Setup xmake
