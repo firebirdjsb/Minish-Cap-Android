@@ -3,24 +3,27 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM="$ROOT/upstream/tmc"
+OVERRIDES="$ROOT/overrides"
 
-if [[ ! -d "$UPSTREAM/.git" && ! -f "$UPSTREAM/.git" ]]; then
-  echo "Initializing Project Picori submodule..."
-  git -C "$ROOT" submodule update --init --recursive
+if ! git -C "$UPSTREAM" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Initializing pinned Project Picori source..."
+  git -C "$ROOT" submodule sync -- upstream/tmc
+  git -C "$ROOT" submodule update --init --depth 1 -- upstream/tmc
 fi
+
+# Only VirtuaAPU is required by the native Android game build. Two other
+# upstream submodules are optional/private and must not make preparation fail.
+git -C "$UPSTREAM" submodule sync -- libs/VirtuaAPU
+git -C "$UPSTREAM" submodule update --init --depth 1 -- libs/VirtuaAPU
 
 echo "Resetting upstream working tree..."
 git -C "$UPSTREAM" reset --hard
 git -C "$UPSTREAM" clean -fd
 
-echo "Applying Android phone patches..."
-for patch in "$ROOT"/patches/*.patch; do
-  [[ -e "$patch" ]] || continue
-  echo "  -> $(basename "$patch")"
-  git -C "$UPSTREAM" apply --whitespace=fix "$patch"
-done
+echo "Applying Android phone overrides..."
+cp -a "$OVERRIDES/android/." "$UPSTREAM/android/"
 
 echo
 echo "Android source prepared."
 echo "Upstream commit: $(git -C "$UPSTREAM" rev-parse --short HEAD)"
-echo "Next: build the native arm64-v8a target, then package with Gradle."
+echo "Target: arm64-v8a single-screen phone APK"
