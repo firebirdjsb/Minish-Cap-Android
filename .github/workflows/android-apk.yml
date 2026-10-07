@@ -79,8 +79,8 @@ jobs:
           "$TOOLBIN/llvm-strip" --strip-unneeded "$LIB"
           "$TOOLBIN/llvm-objcopy" --add-gnu-debuglink=build/android-symbols/libmain.so.debug "$LIB"
           test -s build/android-symbols/libmain.so.debug
-          "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -q '\\.gnu_debuglink'
-          ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -q '\\.debug_info'
+          "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.gnu_debuglink'
+          ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.debug_info'
 
       - name: Build release APK
         shell: bash
