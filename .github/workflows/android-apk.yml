@@ -85,8 +85,28 @@ jobs:
       - name: Cache Android test signing key
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: minish-cap-android-s24-debug-keystore-v1
+          path: ~/.android/minish-cap-s24-test.keystore
+          key: minish-cap-android-s24-signing-v2
+
+      - name: Prepare stable Android test signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          KS="$HOME/.android/minish-cap-s24-test.keystore"
+
+          if [[ ! -s "$KS" ]]; then
+            keytool -genkeypair -noprompt               -keystore "$KS"               -storepass android               -keypass android               -alias minishcaptest               -keyalg RSA               -keysize 2048               -validity 10950               -dname "CN=Minish Cap Android Test,O=firebirdjsb,C=CA"
+          fi
+
+          keytool -list -v -keystore "$KS" -storepass android -alias minishcaptest
+
+          {
+            echo "TMC_KEYSTORE_FILE=$KS"
+            echo "TMC_KEYSTORE_PASSWORD=android"
+            echo "TMC_KEY_ALIAS=minishcaptest"
+            echo "TMC_KEY_PASSWORD=android"
+          } >> "$GITHUB_ENV"
 
       - name: Build release APK
         shell: bash
@@ -104,6 +124,15 @@ jobs:
 
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "$APK"
+
+          APK_CERT=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:lower:]' '[:upper:]')
+          KS_CERT=$(keytool -list -v             -keystore "$TMC_KEYSTORE_FILE"             -storepass "$TMC_KEYSTORE_PASSWORD"             -alias "$TMC_KEY_ALIAS"             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          if [[ -z "$APK_CERT" || -z "$KS_CERT" || "$APK_CERT" != "$KS_CERT" ]]; then
+            echo "::error::APK certificate does not match the persisted CI signing key"
+            echo "APK=$APK_CERT"
+            echo "KEY=$KS_CERT"
+            exit 1
+          fi
 
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmain.so'
           if unzip -l "$APK" | grep -q 'lib/x86_64/libmain.so'; then
