@@ -54,62 +54,62 @@ extern "C" void Port_TouchControls_RenderImGui(void) {
         const ImVec2 h1(g.cx + half, g.cy + t * 0.5f);
         const ImVec2 v0(g.cx - t * 0.5f, g.cy - half);
         const ImVec2 v1(g.cx + t * 0.5f, g.cy + half);
-        dl->AddRectFilled(h0, h1, col(70, 74, 82, 92), round);
-        dl->AddRectFilled(v0, v1, col(70, 74, 82, 92), round);
-        dl->AddRect(h0, h1, col(190, 196, 204, 120), round, 0, 2.0f);
-        dl->AddRect(v0, v1, col(190, 196, 204, 120), round, 0, 2.0f);
+        dl->AddRectFilled(h0, h1, col(58, 62, 70, 138), round);
+        dl->AddRectFilled(v0, v1, col(58, 62, 70, 138), round);
+        dl->AddRect(h0, h1, col(226, 230, 238, 205), round, 0, 3.0f);
+        dl->AddRect(v0, v1, col(226, 230, 238, 205), round, 0, 3.0f);
 
         const float textY = g.cy - ImGui::GetFontSize() * 0.5f;
         dl->AddText(ImVec2(g.cx - ImGui::CalcTextSize("U").x * 0.5f, g.cy - half + t * 0.25f),
-                    col(235, 238, 244, 220), "U");
+                    col(250, 252, 255, 245), "U");
         dl->AddText(ImVec2(g.cx - ImGui::CalcTextSize("D").x * 0.5f, g.cy + half - t * 0.70f),
-                    col(235, 238, 244, 220), "D");
-        dl->AddText(ImVec2(g.cx - half + t * 0.30f, textY), col(235, 238, 244, 220), "L");
-        dl->AddText(ImVec2(g.cx + half - t * 0.70f, textY), col(235, 238, 244, 220), "R");
+                    col(250, 252, 255, 245), "D");
+        dl->AddText(ImVec2(g.cx - half + t * 0.30f, textY), col(250, 252, 255, 245), "L");
+        dl->AddText(ImVec2(g.cx + half - t * 0.70f, textY), col(250, 252, 255, 245), "R");
     } else {
         const JoyGeom g = LiveJoyGeom(w, h);
-        dl->AddCircleFilled(ImVec2(g.cx, g.cy), g.outerR, col(70, 74, 82, 80), 48);
-        dl->AddCircle(ImVec2(g.cx, g.cy), g.outerR, col(190, 196, 204, 110), 48, 2.0f);
+        dl->AddCircleFilled(ImVec2(g.cx, g.cy), g.outerR, col(58, 62, 70, 132), 48);
+        dl->AddCircle(ImVec2(g.cx, g.cy), g.outerR, col(226, 230, 238, 195), 48, 3.0f);
         const float kx = g.cx + sJoyKnobDx;
         const float ky = g.cy + sJoyKnobDy;
-        dl->AddCircleFilled(ImVec2(kx, ky), g.knobR, col(115, 120, 130, 112), 40);
-        dl->AddCircle(ImVec2(kx, ky), g.knobR, col(205, 210, 220, 125), 40, 2.0f);
+        dl->AddCircleFilled(ImVec2(kx, ky), g.knobR, col(92, 98, 108, 158), 40);
+        dl->AddCircle(ImVec2(kx, ky), g.knobR, col(232, 236, 244, 210), 40, 3.0f);
     }
 
     const auto zones = BuildButtonZones(w, h);
     for (const TouchZone& z : zones) {
         const bool held = sHeld[z.input];
         const bool glow = (z.input == PORT_INPUT_R) && Port_TouchControls_RActionAvailable();
-        const ImU32 fill = glow ? col(48, 145, 90, held ? 145 : 105)
-                                : col(72, 76, 84, held ? 145 : 92);
-        const ImU32 stroke = glow ? col(105, 235, 165, held ? 190 : 150)
-                                  : col(195, 200, 210, held ? 160 : 120);
+        const ImU32 fill = glow ? col(48, 145, 90, held ? 205 : 170)
+                                : col(58, 62, 70, held ? 205 : 145);
+        const ImU32 stroke = glow ? col(120, 245, 185, held ? 245 : 220)
+                                  : col(230, 234, 242, held ? 235 : 205);
         if (z.shape == TouchShape::Circle) {
             dl->AddCircleFilled(ImVec2(z.cx, z.cy), z.radius, fill, 48);
-            dl->AddCircle(ImVec2(z.cx, z.cy), z.radius, stroke, 48, 2.0f);
+            dl->AddCircle(ImVec2(z.cx, z.cy), z.radius, stroke, 48, 3.0f);
             const ImVec2 ts = ImGui::CalcTextSize(z.label);
             dl->AddText(ImVec2(z.cx - ts.x * 0.5f, z.cy - ts.y * 0.5f),
-                        col(242, 244, 248, held ? 255 : 225), z.label);
+                        col(252, 253, 255, held ? 255 : 248), z.label);
         } else {
             const ImVec2 a(z.bounds.x, z.bounds.y);
             const ImVec2 b(z.bounds.x + z.bounds.w, z.bounds.y + z.bounds.h);
             const float round = z.bounds.h * 0.5f;
             dl->AddRectFilled(a, b, fill, round);
-            dl->AddRect(a, b, stroke, round, 0, 2.0f);
+            dl->AddRect(a, b, stroke, round, 0, 3.0f);
             const ImVec2 ts = ImGui::CalcTextSize(z.label);
             dl->AddText(ImVec2(z.bounds.x + (z.bounds.w - ts.x) * 0.5f,
                                z.bounds.y + (z.bounds.h - ts.y) * 0.5f),
-                        col(242, 244, 248, held ? 255 : 225), z.label);
+                        col(252, 253, 255, held ? 255 : 248), z.label);
         }
     }
 
     const SettingsBtnGeom sg = BuildSettingsBtnGeom(w, h);
-    dl->AddCircleFilled(ImVec2(sg.cx, sg.cy), sg.r, col(60, 64, 70, 86), 40);
-    dl->AddCircle(ImVec2(sg.cx, sg.cy), sg.r, col(185, 190, 200, 120), 40, 2.0f);
+    dl->AddCircleFilled(ImVec2(sg.cx, sg.cy), sg.r, col(52, 56, 64, 145), 40);
+    dl->AddCircle(ImVec2(sg.cx, sg.cy), sg.r, col(228, 232, 240, 205), 40, 3.0f);
     const char* menu = "MENU";
     const ImVec2 mts = ImGui::CalcTextSize(menu);
     dl->AddText(ImVec2(sg.cx - mts.x * 0.5f, sg.cy - mts.y * 0.5f),
-                col(235, 238, 244, 220), menu);
+                col(250, 252, 255, 245), menu);
 }
 
 '''
