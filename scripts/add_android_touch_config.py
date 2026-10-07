@@ -4,6 +4,28 @@ from pathlib import Path
 cfg = Path("upstream/tmc/port/port_runtime_config.cpp")
 src = cfg.read_text(encoding="utf-8")
 
+# S24-class Android devices have ample headroom for the GBA display LUT.
+# Keep Android aligned with desktop: colour correction is ON by default.
+src = src.replace(
+"""#ifdef __ANDROID__
+bool sColorCorrect = false; /* Too heavy for low-end ARM by default */
+#else
+bool sColorCorrect = true; /* GBA-LCD colour correction (default on) */
+#endif
+""",
+"""bool sColorCorrect = true; /* GBA-LCD colour correction (default on) */
+""", 1)
+
+src = src.replace(
+"""#ifdef __ANDROID__
+    { "color_correction", &sColorCorrect, false },
+#else
+    { "color_correction", &sColorCorrect, true },
+#endif
+""",
+"""    { "color_correction", &sColorCorrect, true },
+""", 1)
+
 src = src.replace(
 """PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
 float sTouchScale = 1.0f;   /* multiplies the touch layout unit  */
@@ -98,6 +120,16 @@ migration_new = """    try {
         sConfigJson["touch_scheme"] = "dpad";
         sConfigJson["touch_enabled"] = true;
         sConfigJson["android_touch_layout_version"] = 1;
+        SaveConfig();
+    }
+
+    /* Existing Android installs inherited the old low-end-ARM default of
+     * colour correction OFF. Migrate that default once, then respect the
+     * user's choice forever after. */
+    if (!sConfigJson.contains("android_color_correction_default_version")) {
+        sColorCorrect = true;
+        sConfigJson["color_correction"] = true;
+        sConfigJson["android_color_correction_default_version"] = 1;
         SaveConfig();
     }
 #endif
