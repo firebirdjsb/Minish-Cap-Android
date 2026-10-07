@@ -22,6 +22,7 @@ git -C "$UPSTREAM" clean -fd
 
 echo "Applying Android phone overrides..."
 cp -a "$OVERRIDES/." "$UPSTREAM/"
+python3 "$ROOT/scripts/add_android_save_transfer_api.py"
 python3 "$ROOT/scripts/tune_s24_touch.py"
 
 echo
