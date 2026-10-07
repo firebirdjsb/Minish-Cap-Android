@@ -62,6 +62,21 @@ for a, b in repls.items():
         raise SystemExit(f"voxel depth-separation pattern not found: {a}")
     src = src.replace(a, b)
 
+# Give interiors a small edge safety skirt too. The original voxel renderer
+# used no interior margin, so low/steep camera angles could see past a room's
+# last wall tile into the black void. This extends existing edge material only
+# in world geometry; it does not duplicate the final screen.
+margin_old = """    constexpr int kMargin = 24;
+    const int margin = outdoors ? kMargin : 0;
+"""
+margin_new = """    constexpr int kOutdoorMargin = 24;
+    constexpr int kIndoorMargin = 6;
+    const int margin = outdoors ? kOutdoorMargin : kIndoorMargin;
+"""
+if margin_old not in src:
+    raise SystemExit("voxel room-edge margin block not found")
+src = src.replace(margin_old, margin_new, 1)
+
 # A far plane of 4000 throws away depth precision for rooms capped at 1024 px
 # plus the 24-tile exterior margin. 2048 comfortably covers the scene and
 # materially improves precision at every supported pitch.
