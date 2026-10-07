@@ -394,7 +394,7 @@ new_rom = """        if (rom_present) {
             ImGui::TextUnformatted("ROM");
             ImGui::PopStyleColor();
             ImGui::SameLine();
-            ImGui::TextWrapped(rom_name ? rom_name : "?");
+            ImGui::TextWrapped("%s", rom_name ? rom_name : "?");
 
             if (ImGui::Button("Change ROM...", ImVec2(ImGui::GetContentRegionAvail().x, 56.0f))) {
                 if (out_change_rom)
