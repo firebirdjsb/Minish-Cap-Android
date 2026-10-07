@@ -37,6 +37,12 @@ jobs:
           git -C upstream/tmc submodule update --init --depth 1 -- libs/VirtuaAPU
           test -d upstream/tmc/libs/VirtuaAPU/src
 
+      - name: Install voxel shader compiler
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y glslang-tools
+
       - name: Prepare patched upstream
         shell: bash
         run: |
