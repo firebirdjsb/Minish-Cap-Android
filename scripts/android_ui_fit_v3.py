@@ -405,8 +405,11 @@ old_action = """        {
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.40f, 0.72f, 0.46f, 1.0f));
             ImGui::SetCursorPosX((win_w - sz.x) * 0.5f);
             ImGui::SetWindowFontScale(1.4f);
-            const bool clicked = ImGui::Button(lbl, sz) || ImGui::IsKeyPressed(ImGuiKey_Enter) ||
-                                 ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) || ImGui::IsKeyPressed(ImGuiKey_Space);
+            const bool clicked = ImGui::Button(lbl, sz) ||
+                                 ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown, false) ||
+                                 ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+                                 ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) ||
+                                 ImGui::IsKeyPressed(ImGuiKey_Space);
             if (clicked) {
                 if (is_select) {
                     if (out_change_rom)
