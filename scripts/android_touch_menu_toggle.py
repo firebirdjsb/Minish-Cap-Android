@@ -81,6 +81,37 @@ if render_old not in src:
     raise SystemExit("SDL touch render block not found")
 src = src.replace(render_old, render_new, 1)
 
+# SDL_GPU/Vulkan touch visuals share the same policy: only MENU stays visible
+# over the settings screen.
+imgui_anchor = """    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if (!dl) {
+        return;
+    }
+
+    auto alpha = [](int base) -> int {
+"""
+imgui_repl = """    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if (!dl) {
+        return;
+    }
+
+    if (Port_DebugMenu_IsOpen()) {
+        const SettingsBtnGeom sg = BuildSettingsBtnGeom(w, h);
+        dl->AddCircleFilled(ImVec2(sg.cx, sg.cy), sg.r, IM_COL32(52, 56, 64, 220), 40);
+        dl->AddCircle(ImVec2(sg.cx, sg.cy), sg.r, IM_COL32(236, 240, 248, 255), 40, 3.0f);
+        const char* menu = "MENU";
+        const ImVec2 mts = ImGui::CalcTextSize(menu);
+        dl->AddText(ImVec2(sg.cx - mts.x * 0.5f, sg.cy - mts.y * 0.5f),
+                    IM_COL32(252, 253, 255, 255), menu);
+        return;
+    }
+
+    auto alpha = [](int base) -> int {
+"""
+if imgui_anchor not in src:
+    raise SystemExit("GPU/ImGui touch render anchor not found; run this transform after android_gpu_touch_overlay.py")
+src = src.replace(imgui_anchor, imgui_repl, 1)
+
 touch.write_text(src, encoding="utf-8")
 
 # Touch MENU should be a true toggle for the main Android settings menu.
