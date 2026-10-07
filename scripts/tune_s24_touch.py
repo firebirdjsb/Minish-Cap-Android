@@ -182,5 +182,90 @@ replace_once(
     }
 """, "touch render gate")
 
+# Stronger phone contrast: keep the controls translucent, but make their
+# shapes and labels obvious over bright Minish Cap scenes.
+replace_once(
+"""    FillCircle(ren, g.cx, g.cy, g.r, 88, 92, 98, A(95));
+    StrokeCircle(ren, g.cx, g.cy, g.r - 0.5f, 118, 122, 130, A(115));
+""",
+"""    FillCircle(ren, g.cx, g.cy, g.r, 62, 66, 74, A(145));
+    StrokeCircle(ren, g.cx, g.cy, g.r - 0.5f, 220, 224, 232, A(210));
+""", "settings visibility")
+
+replace_once(
+"""    FillCircle(ren, g.cx, g.cy, g.outerR, 88, 92, 98, A(sJoyFloating ? 92 : 78));
+    StrokeCircle(ren, g.cx, g.cy, g.outerR - 0.5f, 118, 122, 130, A(sJoyFloating ? 115 : 95));
+""",
+"""    FillCircle(ren, g.cx, g.cy, g.outerR, 62, 66, 74, A(sJoyFloating ? 155 : 135));
+    StrokeCircle(ren, g.cx, g.cy, g.outerR - 0.5f, 220, 224, 232, A(sJoyFloating ? 220 : 195));
+""", "joystick ring visibility")
+
+replace_once(
+"""    FillCircle(ren, kx, ky, g.knobR, 96, 100, 108, A(deflect ? 125 : 92));
+    StrokeCircle(ren, kx, ky, g.knobR - 0.5f, 120, 124, 132, A(deflect ? 105 : 88));
+""",
+"""    FillCircle(ren, kx, ky, g.knobR, 88, 94, 104, A(deflect ? 190 : 160));
+    StrokeCircle(ren, kx, ky, g.knobR - 0.5f, 228, 232, 240, A(deflect ? 225 : 200));
+""", "joystick knob visibility")
+
+replace_once(
+"""        const Uint8 fillA = held ? 125 : 80;
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(ren, 88, 92, 98, fillA);
+        SDL_RenderFillRect(ren, &r);
+        const Uint8 strokeA = held ? 110 : 80;
+        SDL_SetRenderDrawColor(ren, 118, 122, 130, strokeA);
+""",
+"""        const Uint8 fillA = held ? 180 : 130;
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(ren, 62, 66, 74, fillA);
+        SDL_RenderFillRect(ren, &r);
+        const Uint8 strokeA = held ? 225 : 185;
+        SDL_SetRenderDrawColor(ren, 220, 224, 232, strokeA);
+""", "D-pad visibility")
+
+replace_once(
+"""    const Uint8 fillA = A(held ? 125 : (glow ? 110 : 88));
+""",
+"""    const Uint8 fillA = A(held ? 190 : (glow ? 170 : 140));
+""", "face fill visibility")
+
+replace_once(
+"""        StrokeCircle(ren, cx, cy, r - 0.5f, 96, 220, 160, A(held ? 160 : 130));
+""",
+"""        StrokeCircle(ren, cx, cy, r - 0.5f, 120, 245, 185, A(held ? 245 : 220));
+""", "glow outline visibility")
+
+replace_once(
+"""        FillCircle(ren, cx, cy, r, 88, 92, 98, fillA);
+        StrokeCircle(ren, cx, cy, r - 0.5f, 118, 122, 130, A(held ? 105 : 82));
+""",
+"""        FillCircle(ren, cx, cy, r, 62, 66, 74, fillA);
+        StrokeCircle(ren, cx, cy, r - 0.5f, 225, 229, 238, A(held ? 235 : 205));
+""", "face outline visibility")
+
+replace_once(
+"""    SDL_SetRenderDrawColor(ren, 232, 236, 242, A(held ? 240 : 205));
+""",
+"""    SDL_SetRenderDrawColor(ren, 248, 250, 252, A(held ? 255 : 245));
+""", "face label visibility")
+
+replace_once(
+"""    FillStadium(ren, b, 88, 92, 98, A(held ? 120 : 85));
+    StrokeStadium(ren, b, 118, 122, 130, A(held ? 102 : 78));
+""",
+"""    FillStadium(ren, b, 62, 66, 74, A(held ? 185 : 140));
+    StrokeStadium(ren, b, 225, 229, 238, A(held ? 230 : 200));
+""", "stadium visibility")
+
+# The second label line belongs to stadium controls.
+replace_once(
+"""    SDL_SetRenderDrawColor(ren, 232, 236, 242, A(held ? 240 : 205));
+    SDL_RenderDebugText(ren, b.x + (b.w - textW) * 0.5f, b.y + (b.h - kTh) * 0.5f, z.label);
+""",
+"""    SDL_SetRenderDrawColor(ren, 248, 250, 252, A(held ? 255 : 245));
+    SDL_RenderDebugText(ren, b.x + (b.w - textW) * 0.5f, b.y + (b.h - kTh) * 0.5f, z.label);
+""", "stadium label visibility")
+
 path.write_text(src, encoding="utf-8")
-print("Applied GBA phone touch layout, toggle gate, and cutout-safe placement")
+print("Applied GBA phone touch layout, high-contrast visibility, and cutout-safe placement")
