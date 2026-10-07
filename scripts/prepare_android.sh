@@ -35,6 +35,7 @@ python3 "$ROOT/scripts/fix_android_single_screen_present.py"
 python3 "$ROOT/scripts/android_native_aspect_modes.py"
 python3 "$ROOT/scripts/android_gpu_raster_sync.py"
 python3 "$ROOT/scripts/android_voxel_clean_geometry.py"
+python3 "$ROOT/scripts/android_voxel_world_collision.py"
 
 echo
 echo "Android source prepared."
