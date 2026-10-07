@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+cfg = Path("upstream/tmc/port/port_runtime_config.cpp")
+src = cfg.read_text(encoding="utf-8")
+
+src = src.replace(
+"""PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
+float sTouchScale = 1.0f;   /* multiplies the touch layout unit  */
+float sTouchOpacity = 1.0f; /* multiplies every control's alpha  */
+""",
+"""#ifdef __ANDROID__
+PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_DPAD;
+bool sTouchEnabled = true;
+#else
+PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
+bool sTouchEnabled = true;
+#endif
+float sTouchScale = 1.0f;   /* multiplies the touch layout unit  */
+float sTouchOpacity = 0.82f; /* phone default: visible without covering art */
+""", 1)
+
+src = src.replace(
+"""    j["touch_scheme"] = "joystick";
+""",
+"""#ifdef __ANDROID__
+    j["touch_scheme"] = "dpad";
+    j["touch_enabled"] = true;
+#else
+    j["touch_scheme"] = "joystick";
+    j["touch_enabled"] = true;
+#endif
+""", 1)
+
+src = src.replace(
+"""            sTouchScheme = (ts == "dpad") ? PORT_TOUCH_SCHEME_DPAD : PORT_TOUCH_SCHEME_JOYSTICK;
+        }
+        sTouchScale = std::min(1.6f, std::max(0.6f, JsonValue(j, "touch_scale", 1.0f)));
+        sTouchOpacity = std::min(1.5f, std::max(0.3f, JsonValue(j, "touch_opacity", 1.0f)));
+""",
+"""            sTouchScheme = (ts == "dpad") ? PORT_TOUCH_SCHEME_DPAD : PORT_TOUCH_SCHEME_JOYSTICK;
+        }
+        sTouchEnabled = JsonValue(j, "touch_enabled", true);
+        sTouchScale = std::min(1.6f, std::max(0.6f, JsonValue(j, "touch_scale", 1.0f)));
+        sTouchOpacity = std::min(1.5f, std::max(0.3f, JsonValue(j, "touch_opacity", 0.82f)));
+""", 1)
+
+anchor = """extern "C" PortTouchScheme Port_Config_TouchScheme(void) {
+    return sTouchScheme;
+}
+
+"""
+if anchor not in src:
+    raise SystemExit("touch scheme accessor anchor not found")
+src = src.replace(anchor, anchor + """extern "C" bool Port_Config_TouchEnabled(void) {
+    return sTouchEnabled;
+}
+
+extern "C" void Port_Config_SetTouchEnabled(bool enabled) {
+    sTouchEnabled = enabled;
+    sConfigJson["touch_enabled"] = enabled;
+    SaveConfig();
+}
+
+""", 1)
+
+cfg.write_text(src, encoding="utf-8")
+
+hdr = Path("upstream/tmc/port/port_runtime_config.h")
+h = hdr.read_text(encoding="utf-8")
+anchor_h = """PortTouchScheme Port_Config_TouchScheme(void);
+void Port_Config_SetTouchScheme(PortTouchScheme scheme);
+void Port_Config_CycleTouchScheme(int direction);
+"""
+if anchor_h not in h:
+    raise SystemExit("touch header anchor not found")
+h = h.replace(anchor_h, """PortTouchScheme Port_Config_TouchScheme(void);
+void Port_Config_SetTouchScheme(PortTouchScheme scheme);
+void Port_Config_CycleTouchScheme(int direction);
+bool Port_Config_TouchEnabled(void);
+void Port_Config_SetTouchEnabled(bool enabled);
+""", 1)
+hdr.write_text(h, encoding="utf-8")
+
+print("Added persisted touch enable flag and GBA D-pad phone defaults")
