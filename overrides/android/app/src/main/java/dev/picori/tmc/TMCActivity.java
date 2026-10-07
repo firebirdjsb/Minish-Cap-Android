@@ -1,5 +1,6 @@
 package dev.picori.tmc;
 
+import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -20,12 +21,14 @@ import org.libsdl.app.SDLActivity;
 public class TMCActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onCreate(savedInstanceState);
         configurePhoneWindow();
     }
 
     @Override
     protected void onResume() {
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onResume();
         configurePhoneWindow();
     }
