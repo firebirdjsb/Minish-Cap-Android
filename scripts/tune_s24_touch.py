@@ -28,10 +28,10 @@ replace_once(
     const float fh = static_cast<float>(std::max(1, h));
     const float unit = LayoutUnit(w, h);
     JoyGeom g;
-    g.cx = fw * 0.155f;
-    g.cy = fh * 0.70f;
-    g.outerR = Clamp(unit * 1.02f, 70.0f, 136.0f);
-    g.knobR = Clamp(unit * 0.33f, 24.0f, 46.0f);
+    g.cx = fw * 0.17f;
+    g.cy = fh * 0.72f;
+    g.outerR = Clamp(unit * 1.60f, 105.0f, 190.0f);
+    g.knobR = Clamp(unit * 0.55f, 38.0f, 68.0f);
     return g;
 }
 """, "joystick geometry")
@@ -268,4 +268,4 @@ replace_once(
 """, "stadium label visibility")
 
 path.write_text(src, encoding="utf-8")
-print("Applied GBA phone touch layout, high-contrast visibility, and cutout-safe placement")
+print("Applied large floating joystick, high-contrast touch visibility, and cutout-safe placement")
