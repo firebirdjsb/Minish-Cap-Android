@@ -68,6 +68,20 @@ jobs:
           xmake build -y tmc_pc
           test -f build/android/arm64-v8a/libmain.so
 
+      - name: Split debug symbols and strip ARM64 library
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          LIB=build/android/arm64-v8a/libmain.so
+          TOOLBIN="$TMC_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          mkdir -p build/android-symbols
+          "$TOOLBIN/llvm-objcopy" --only-keep-debug "$LIB" build/android-symbols/libmain.so.debug
+          "$TOOLBIN/llvm-strip" --strip-unneeded "$LIB"
+          "$TOOLBIN/llvm-objcopy" --add-gnu-debuglink=build/android-symbols/libmain.so.debug "$LIB"
+          test -s build/android-symbols/libmain.so.debug
+          "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -q '\\.gnu_debuglink'
+          ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -q '\\.debug_info'
+
       - name: Build release APK
         shell: bash
         working-directory: upstream/tmc/android
@@ -93,9 +107,22 @@ jobs:
 
           cp "$APK" Minish-Cap-Android-S24-arm64.apk
 
+      - name: Pack native symbols
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          tar -czf Minish-Cap-Android-S24-arm64-symbols.tar.gz -C build/android-symbols libmain.so.debug
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Minish-Cap-Android-S24-arm64
           path: upstream/tmc/Minish-Cap-Android-S24-arm64.apk
+          if-no-files-found: error
+
+      - name: Upload native symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minish-Cap-Android-S24-arm64-symbols
+          path: upstream/tmc/Minish-Cap-Android-S24-arm64-symbols.tar.gz
           if-no-files-found: error
