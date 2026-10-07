@@ -64,7 +64,7 @@ jobs:
         working-directory: upstream/tmc
         run: |
           xmake f -y -p android -a arm64-v8a --ndk="$TMC_NDK" \
-            --game_version=USA --widescreen_width=384
+            --game_version=USA --widescreen_width=576
           xmake build -y tmc_pc
           test -f build/android/arm64-v8a/libmain.so
 
