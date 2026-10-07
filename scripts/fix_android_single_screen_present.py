@@ -50,7 +50,83 @@ new = """        const PortBgFill bgFill = Port_Config_BgFill();
 if old not in src:
     raise SystemExit("expected background-fill present block not found")
 
-path.write_text(src.replace(old, new, 1), encoding="utf-8")
+src = src.replace(old, new, 1)
+
+viewport_old = """    int aspW = FW;
+    int aspH = FH;
+    const PortAspectMode mode = Port_Config_AspectMode();
+    switch (mode) {
+        case PORT_ASPECT_WIDESCREEN_16_9:
+            aspW = 16;
+            aspH = 9;
+            break;
+        case PORT_ASPECT_ULTRAWIDE_21_9:
+            aspW = 21;
+            aspH = 9;
+            break;
+        case PORT_ASPECT_SUPER_ULTRAWIDE_32_9:
+            aspW = 32;
+            aspH = 9;
+            break;
+        case PORT_ASPECT_NATIVE_3_2:
+        default:
+            /* "No constraint": the stage spans the whole window. With the
+             * historical black fill this is pixel-identical to the old
+             * stage==frame behavior; with solid/blurred fills it lets the
+             * ambient backdrop cover the entire monitor, so fixed-canvas
+             * scenes (title, one-screen rooms) have no dead black bars. */
+            aspW = outW;
+            aspH = outH;
+            break;
+    }
+"""
+
+viewport_new = """    int aspW = FW;
+    int aspH = FH;
+#if defined(__ANDROID__) && (MODE1_GBA_WIDTH > 240)
+    /*
+     * A true-wide Android gameplay frame already tracks the physical phone
+     * aspect (Port_Widescreen_TargetViewWidth). Do not letterbox that frame
+     * again inside a separate 16:9/21:9 presentation stage. This is what made
+     * "Widescreen" still show side bars on 19.5:9 phones.
+     *
+     * Fixed 240px canvases (title, pause, file-select, one-screen rooms) keep
+     * the normal aspect-mode path below and are never stretched.
+     */
+    if (fbW > 240 && Port_Config_WidescreenEnabled()) {
+        aspW = outW;
+        aspH = outH;
+    } else
+#endif
+    {
+        const PortAspectMode mode = Port_Config_AspectMode();
+        switch (mode) {
+            case PORT_ASPECT_WIDESCREEN_16_9:
+                aspW = 16;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_ULTRAWIDE_21_9:
+                aspW = 21;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_SUPER_ULTRAWIDE_32_9:
+                aspW = 32;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_NATIVE_3_2:
+            default:
+                aspW = outW;
+                aspH = outH;
+                break;
+        }
+    }
+"""
+
+if viewport_old not in src:
+    raise SystemExit("expected SDL_Renderer aspect-mode block not found")
+src = src.replace(viewport_old, viewport_new, 1)
+
+path.write_text(src, encoding="utf-8")
 
 gpu_path = Path("upstream/tmc/port/port_gpu_renderer.cpp")
 gpu = gpu_path.read_text(encoding="utf-8")
@@ -108,6 +184,72 @@ gpu_new = """#ifndef __ANDROID__
 if gpu_old not in gpu:
     raise SystemExit("expected SDL_GPU blurred-frame backdrop block not found")
 
-gpu_path.write_text(gpu.replace(gpu_old, gpu_new, 1), encoding="utf-8")
+gpu = gpu.replace(gpu_old, gpu_new, 1)
 
-print("Disabled duplicate-frame ambient fill on Android (SDL_Renderer + SDL_GPU)")
+gpu_aspect_old = """        int aspW = FW, aspH = FH;
+        const PortAspectMode mode = Port_Config_AspectMode();
+        switch (mode) {
+            case PORT_ASPECT_WIDESCREEN_16_9:
+                aspW = 16;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_ULTRAWIDE_21_9:
+                aspW = 21;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_SUPER_ULTRAWIDE_32_9:
+                aspW = 32;
+                aspH = 9;
+                break;
+            case PORT_ASPECT_NATIVE_3_2:
+            default:
+                /* "No constraint": stage spans the whole swapchain (see
+                 * Port_PPU_ComputeViewportRects — identical for black fill,
+                 * lets solid/blurred fills cover the entire monitor). */
+                aspW = (int)swap_w;
+                aspH = (int)swap_h;
+                break;
+        }
+"""
+
+gpu_aspect_new = """        int aspW = FW, aspH = FH;
+#if defined(__ANDROID__) && (MODE1_GBA_WIDTH > 240)
+        if (fb_w > 240 && Port_Config_WidescreenEnabled()) {
+            /* The wide source frame was computed from the phone's live aspect.
+             * Present it directly to the whole swapchain instead of nesting it
+             * inside a second fixed aspect constraint. */
+            aspW = (int)swap_w;
+            aspH = (int)swap_h;
+        } else
+#endif
+        {
+            const PortAspectMode mode = Port_Config_AspectMode();
+            switch (mode) {
+                case PORT_ASPECT_WIDESCREEN_16_9:
+                    aspW = 16;
+                    aspH = 9;
+                    break;
+                case PORT_ASPECT_ULTRAWIDE_21_9:
+                    aspW = 21;
+                    aspH = 9;
+                    break;
+                case PORT_ASPECT_SUPER_ULTRAWIDE_32_9:
+                    aspW = 32;
+                    aspH = 9;
+                    break;
+                case PORT_ASPECT_NATIVE_3_2:
+                default:
+                    aspW = (int)swap_w;
+                    aspH = (int)swap_h;
+                    break;
+            }
+        }
+"""
+
+if gpu_aspect_old not in gpu:
+    raise SystemExit("expected SDL_GPU aspect-mode block not found")
+gpu = gpu.replace(gpu_aspect_old, gpu_aspect_new, 1)
+
+gpu_path.write_text(gpu, encoding="utf-8")
+
+print("Applied Android single-screen + full-display true-widescreen presentation fixes")
