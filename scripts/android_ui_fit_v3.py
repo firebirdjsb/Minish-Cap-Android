@@ -127,7 +127,7 @@ old_setup_item = """                if (selected) {
 
                 /* Also make ordinary D-pad navigation on the section rail
                  * immediately switch the right pane, not just move a highlight. */
-                if (!sectionChangedExplicitly && ImGui::IsItemFocused() && section != i) {
+                if (ImGui::IsItemFocused() && section != i) {
                     section = i;
                     sectionChanged = true;
                 }
