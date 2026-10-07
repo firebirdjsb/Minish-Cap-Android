@@ -32,7 +32,7 @@ float sTouchScale = 1.0f;   /* multiplies the touch layout unit  */
 float sTouchOpacity = 1.0f; /* multiplies every control's alpha  */
 """,
 """#ifdef __ANDROID__
-PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_DPAD;
+PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
 bool sTouchEnabled = true;
 #else
 PortTouchScheme sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
@@ -46,9 +46,9 @@ src = src.replace(
 """    j["touch_scheme"] = "joystick";
 """,
 """#ifdef __ANDROID__
-    j["touch_scheme"] = "dpad";
+    j["touch_scheme"] = "joystick";
     j["touch_enabled"] = true;
-    j["android_touch_layout_version"] = 1;
+    j["android_touch_layout_version"] = 2;
 #else
     j["touch_scheme"] = "joystick";
     j["touch_enabled"] = true;
@@ -109,17 +109,20 @@ migration_new = """    try {
 
 #ifdef __ANDROID__
     /*
-     * One-time migration for installs created before the phone-native GBA
-     * layout existed. Old configs saved the floating joystick as the default,
-     * so merely changing DefaultsJson would never affect an existing phone.
-     * Migrate once, persist the marker, then always respect the user's choice.
+     * Android touch-layout v2 uses a large floating joystick for movement.
+     * Migrate older D-pad-default installs exactly once, then preserve any
+     * later user choice between joystick and D-pad.
      */
-    if (!sConfigJson.contains("android_touch_layout_version")) {
-        sTouchScheme = PORT_TOUCH_SCHEME_DPAD;
+    const int touchLayoutVersion =
+        sConfigJson.contains("android_touch_layout_version")
+            ? sConfigJson.value("android_touch_layout_version", 0)
+            : 0;
+    if (touchLayoutVersion < 2) {
+        sTouchScheme = PORT_TOUCH_SCHEME_JOYSTICK;
         sTouchEnabled = true;
-        sConfigJson["touch_scheme"] = "dpad";
+        sConfigJson["touch_scheme"] = "joystick";
         sConfigJson["touch_enabled"] = true;
-        sConfigJson["android_touch_layout_version"] = 1;
+        sConfigJson["android_touch_layout_version"] = 2;
         SaveConfig();
     }
 
@@ -166,4 +169,4 @@ void Port_Config_SetTouchEnabled(bool enabled);
 """, 1)
 hdr.write_text(h, encoding="utf-8")
 
-print("Added persisted touch enable flag and GBA D-pad phone defaults")
+print("Added persisted touch enable flag and large joystick Android default")
