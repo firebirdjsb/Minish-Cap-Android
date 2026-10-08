@@ -87,7 +87,7 @@ sprite_repl = """        const float x0 = o.x + scrollX, x1 = x0 + o.w;
         const float entityCenterX = (x0 + x1) * 0.5f;
         const float groundHeight =
             RoomHeightAt(entityCenterX, entityFootZ);
-        const float nativeLayerHeight = tag.layer == 2 ? kTopLayerLift : 0.0f;
+        const float nativeLayerHeight = (tag.layer & 0x7Fu) == 2 ? kTopLayerLift : 0.0f;
         const float elev = tag.kind == PORT_VOXEL_OAM_ENTITY
                                ? std::max(groundHeight, nativeLayerHeight)
                                : nativeLayerHeight;
