@@ -9,20 +9,18 @@ old_call = """        QuadUv(sVerts, kMaxVerts, n, c, o.uv, 1, o.tile, o.pal, o.
     const int worldVerts = n;
 """
 new_call = """        /*
-         * World entities are camera-facing cards. Their geometry tilts back
-         * with the camera, but depth ownership must follow the feet, not each
-         * vertex: otherwise Link's head physically enters a wall/cliff before
-         * his feet reach it and the depth buffer clips his upper body.
-         *
-         * Pack a signed foot height and foot Z into otherwise-unused high bits.
-         * voxel.vert keeps the visual XYZ projection but replaces clip-space
-         * depth with this foot anchor for entity sprites only.
+         * Every OAM piece emitted for one entity must share ONE depth anchor:
+         * the entity's native ground/feet row. Using each piece's own bottom
+         * makes Link's hat/body/subsprites cross a wall at different moments
+         * as animation frames change, producing slicing/clipping.
          */
         Uint32 tileParam = o.tile;
         Uint32 rowParam = o.rowParam;
         if (tag.kind == PORT_VOXEL_OAM_ENTITY) {
-            const int packedY = std::clamp((int)std::lround(elev), -128, 127) + 128;
-            const int packedZ = std::clamp((int)std::lround(entityFootZ), -2048, 2047) + 2048;
+            const float nativeFootY = tag.layer == 2 ? kTopLayerLift : 0.0f;
+            const float nativeFootZ = (float)tag.groundY + scrollY;
+            const int packedY = std::clamp((int)std::lround(nativeFootY), -128, 127) + 128;
+            const int packedZ = std::clamp((int)std::lround(nativeFootZ), -2048, 2047) + 2048;
             tileParam |= (Uint32)(packedY & 0xFF) << 16;
             rowParam |= 0x80000000u | ((Uint32)(packedZ & 0xFFF) << 16);
         }
@@ -51,9 +49,9 @@ new_main = """void main() {
 
     /*
      * Entity sprite marker/anchor packed by port_voxel.cpp:
-     *   aParams.w bit31      = foot-anchored depth
-     *   aParams.w bits16-27 = signed foot Z + 2048
-     *   aParams.y bits16-23 = signed foot height + 128
+     *   aParams.w bit31      = native-feet depth anchor
+     *   aParams.w bits16-27 = one shared entity foot Z + 2048
+     *   aParams.y bits16-23 = native collision-layer height + 128
      *
      * Keep clip X/Y from the camera-facing tilted card, but use one depth for
      * the entire sprite based on its feet. This reproduces the GBA's foot-row
@@ -77,4 +75,4 @@ if old_main not in sh:
 sh = sh.replace(old_main, new_main, 1)
 vert.write_text(sh, encoding="utf-8")
 
-print("Applied foot-anchored entity depth for 3D occlusion")
+print("Applied stable native-feet depth for all 3D entity sprite pieces")
