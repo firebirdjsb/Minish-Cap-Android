@@ -210,6 +210,43 @@ if old_cover_draw not in src:
     raise SystemExit("floor top-layer draw block not found")
 src = src.replace(old_cover_draw, new_cover_draw, 1)
 
+# Generated side faces need a material even when the tile art is mostly dark.
+# Prefer the dominant lit colour, but fall back to the dominant visible colour
+# instead of palette entry 0 / black.
+fill_old = """        std::map<int, int> counts;
+        int fill = 0, fillN = 0;
+        for (int r = yt; r <= yb; ++r)
+            for (int i = 0; i < 256; i += 4) {
+                int ci = Cover(x, r) ? TopIndex(x, r, i & 15, i >> 4, tChar, t8 != 0) : -1;
+                if (ci < 0)
+                    ci = BottomIndex(x, r, i & 15, i >> 4, bChar, b8 != 0);
+                if (ci >= 0 && !Dark555(gBgPltt[ci]) && ++counts[ci] > fillN)
+                    fillN = counts[ci], fill = ci;
+            }
+        const Uint32 fillP = fillN ? (Uint32)fill + 1 : 0;
+"""
+fill_new = """        std::map<int, int> litCounts, allCounts;
+        int fill = 0, fillN = 0, fallbackFill = 0, fallbackN = 0;
+        for (int r = yt; r <= yb; ++r)
+            for (int i = 0; i < 256; i += 4) {
+                int ci = Cover(x, r) ? TopIndex(x, r, i & 15, i >> 4, tChar, t8 != 0) : -1;
+                if (ci < 0)
+                    ci = BottomIndex(x, r, i & 15, i >> 4, bChar, b8 != 0);
+                if (ci < 0)
+                    continue;
+                if (++allCounts[ci] > fallbackN)
+                    fallbackN = allCounts[ci], fallbackFill = ci;
+                if (!Dark555(gBgPltt[ci]) && ++litCounts[ci] > fillN)
+                    fillN = litCounts[ci], fill = ci;
+            }
+        if (!fillN && fallbackN)
+            fill = fallbackFill, fillN = fallbackN;
+        const Uint32 fillP = fillN ? (Uint32)fill + 1 : 0;
+"""
+if fill_old not in src:
+    raise SystemExit("dominant side material block not found")
+src = src.replace(fill_old, fill_new, 1)
+
 # Side faces are geometry the original 2D art never supplies. Reusing a whole
 # doorway/tree/wall tile sideways creates duplicated symbols and giant door
 # panels. Use the run's derived dominant material as a clean side surface.
@@ -217,15 +254,17 @@ old_side_quad = """        Quad(sMapVerts, kMaxMapVerts, n, c, east ? u0 : u0 + 
              top ? 128u : 0u, top ? tChar : bChar, (top ? t8 : b8) | 2u | (fill << 20) | (mask << 8));
 """
 new_side_quad = """        /*
-         * Native-looking side extrusion:
-         * sample only the outermost texel column of the real room tile and
-         * stretch that edge through the generated depth. This preserves the
-         * wall/door/cliff/tree palette and trim without rotating an entire
-         * doorway/tree tile onto the side or replacing it with a flat colour.
+         * Generated side extrusion:
+         * use an interior texel column rather than the tile's outer outline.
+         * Stretching the outermost column was turning black sprite/tile outlines
+         * into the long black slits visible beside trees, cliffs and room walls.
+         * 'fill' is palette-index+1 (fillP); transparent samples fall back to
+         * the run's dominant real material when one exists.
          */
-        const float edgeU = east ? (u0 + 15.25f) : (u0 + 0.75f);
+        const float edgeU = east ? (u0 + 12.5f) : (u0 + 3.5f);
         const Uint32 sideParams =
-            (top ? t8 : b8) | 2u | ((Uint32)fill << 20);
+            (top ? t8 : b8) |
+            (fill ? (2u | ((fill - 1u) << 20)) : 0u);
         Quad(sMapVerts, kMaxMapVerts, n, c,
              edgeU, v0, edgeU, v0 + 16.0f, 0,
              top ? 128u : 0u, top ? tChar : bChar, sideParams);
