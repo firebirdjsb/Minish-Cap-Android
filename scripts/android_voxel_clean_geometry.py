@@ -23,38 +23,40 @@ new_scene = """bool SceneApplicable(void) {
         gRoomControls.width <= 1024 && gRoomControls.height <= 1024 &&
         !(gRoomControls.area == AREA_BEANSTALKS && (gRoomControls.scroll_flags & 1));
 
-    static bool latched = false;
-    static Uint64 missSinceMs = 0;
+    static bool roomLatched = false;
+    static int lastArea = -1;
+    static int lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
 
     if (!structural) {
-        latched = false;
-        missSinceMs = 0;
+        roomLatched = false;
+        lastArea = -1;
         return false;
     }
 
-    if (BottomMapShown()) {
-        latched = true;
-        missSinceMs = 0;
-        return true;
+    const bool roomChanged =
+        lastArea != gRoomControls.area ||
+        lastOriginX != gRoomControls.origin_x ||
+        lastOriginY != gRoomControls.origin_y ||
+        lastW != gRoomControls.width ||
+        lastH != gRoomControls.height;
+
+    if (roomChanged) {
+        roomLatched = false;
+        lastArea = gRoomControls.area;
+        lastOriginX = gRoomControls.origin_x;
+        lastOriginY = gRoomControls.origin_y;
+        lastW = gRoomControls.width;
+        lastH = gRoomControls.height;
     }
 
-    /*
-     * The native room/BG state can be incomplete for several render ticks
-     * during camera scrolls and room seams. Once 3D owns gameplay, do not
-     * bounce to the normal 2D presenter just because the live BG match probe
-     * misses briefly. A real non-game scene releases the latch above.
-     */
-    if (latched) {
-        const Uint64 now = SDL_GetTicks();
-        if (missSinceMs == 0)
-            missSinceMs = now;
-        if (now - missSinceMs < 1200)
-            return true;
-    }
+    if (BottomMapShown())
+        roomLatched = true;
 
-    latched = false;
-    missSinceMs = 0;
-    return false;
+    /* Once this exact room has produced a valid native bottom map, keep the
+     * voxel presenter for the lifetime of the room. Live BG/HDMA updates can
+     * make MapShownPct() miss for a frame while walking; that is not a reason
+     * to flash the normal 2D presenter. */
+    return roomLatched;
 }
 """
 if old_scene not in src:
@@ -160,13 +162,36 @@ old_dirty = """    bool mapDirty = mapKey != sMapKey;
     else if (sSettleFrames > 0 && --sSettleFrames == 0)
         mapDirty = true;
 """
-new_dirty = """    /* Keep the last complete room mesh while the BG probe is transiently
-     * unstable, but continue moving that mesh with the live camera above. */
-    bool mapDirty = roomMapStable ? (mapKey != sMapKey) : (sMapVertCount == 0);
-    if (mapDirty)
-        sSettleFrames = 20;
-    else if (roomMapStable && sSettleFrames > 0 && --sSettleFrames == 0)
+new_dirty = """    /*
+     * Never rebuild room geometry from a one-frame map/collision glitch.
+     * Require a changed room key to remain identical for three consecutive
+     * stable frames. This eliminates the malformed-mesh blink seen while
+     * walking across trigger/collision seams.
+     */
+    static Uint64 sPendingMapKey = 0;
+    static int sPendingMapFrames = 0;
+    bool mapDirty = false;
+
+    if (sMapVertCount == 0 && roomMapStable) {
         mapDirty = true;
+        sPendingMapKey = 0;
+        sPendingMapFrames = 0;
+    } else if (roomMapStable && mapKey != sMapKey) {
+        if (mapKey == sPendingMapKey)
+            ++sPendingMapFrames;
+        else {
+            sPendingMapKey = mapKey;
+            sPendingMapFrames = 1;
+        }
+        if (sPendingMapFrames >= 3) {
+            mapDirty = true;
+            sPendingMapKey = 0;
+            sPendingMapFrames = 0;
+        }
+    } else if (mapKey == sMapKey) {
+        sPendingMapKey = 0;
+        sPendingMapFrames = 0;
+    }
 """
 if old_dirty not in src:
     raise SystemExit("voxel mapDirty block not found")
@@ -264,6 +289,9 @@ old_default_height = "constexpr int kDefaultWallTiles = 2;"
 if old_default_height not in src:
     raise SystemExit("default wall height constant not found")
 src = src.replace(old_default_height, "constexpr int kDefaultWallTiles = 1;", 1)
+
+# The debounced map-key path no longer uses the old periodic settle rebuild.
+src = src.replace("    static int sSettleFrames = 0;\\n", "", 1)
 
 path.write_text(src, encoding="utf-8")
 print("Applied stable 3D scene latch and conservative clean geometry")
