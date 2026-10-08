@@ -41,7 +41,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y glslang-tools
+          sudo apt-get install -y glslang-tools ripgrep g++
 
       - name: Prepare patched upstream
         shell: bash
@@ -73,6 +73,11 @@ jobs:
             --game_version=USA --widescreen_width=576
           xmake build -y tmc_pc
           test -f build/android/arm64-v8a/libmain.so
+
+      - name: Check synthetic voxel scenes at native and widescreen widths
+        shell: bash
+        run: |
+          python3 scripts/check_voxel_scene.py
 
       - name: Split debug symbols and strip ARM64 library
         shell: bash
