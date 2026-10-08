@@ -11,7 +11,6 @@ top_fn = """bool TopMapShown(void) {
 top_helper = top_fn + """
 bool StableTopMapShown(void) {
     static bool latched = false;
-    static Uint64 missSince = 0;
     static int lastArea = -1, lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
 
     const bool roomChanged =
@@ -22,7 +21,6 @@ bool StableTopMapShown(void) {
         lastH != gRoomControls.height;
     if (roomChanged) {
         latched = false;
-        missSince = 0;
         lastArea = gRoomControls.area;
         lastOriginX = gRoomControls.origin_x;
         lastOriginY = gRoomControls.origin_y;
@@ -30,19 +28,13 @@ bool StableTopMapShown(void) {
         lastH = gRoomControls.height;
     }
 
-    const bool shown = TopMapShown();
-    if (shown) {
+    if (TopMapShown())
         latched = true;
-        missSince = 0;
-        return true;
-    }
-    if (!latched)
-        return false;
 
-    const Uint64 now = SDL_GetTicks();
-    if (missSince == 0)
-        missSince = now;
-    return now - missSince < 700;
+    /* The top room map is static room geometry. Once observed for this room,
+     * keep it in the 3D mesh until the room identity changes; temporary BG
+     * repurposing must not make walls/trim disappear for a frame. */
+    return latched;
 }
 """
 if top_fn not in src:
