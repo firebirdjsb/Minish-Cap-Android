@@ -8,7 +8,7 @@ src = vox.read_text(encoding="utf-8")
 stub_anchor = """void Port_Voxel_RequestShot(const char*) {
 }
 """
-stub_repl = stub_anchor + """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int, int, int) {
+stub_repl = stub_anchor + """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int, int, int, int) {
     return false;
 }
 """
@@ -118,16 +118,17 @@ public_anchor = """int Port_Voxel_CurrentArea(void) {
     return SceneApplicable() ? gRoomControls.area : -1;
 }
 """
-public_repl = """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer) {
+public_repl = """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer, int direction) {
     if (!Port_Config_GetVoxelView() || !sVoxelCollisionValid ||
         sVoxelArea != gRoomControls.area ||
         sVoxelOriginX != gRoomControls.origin_x || sVoxelOriginY != gRoomControls.origin_y)
         return false;
 
-    /* The renderer infers its walls from the bottom collision map. Never feed
-     * that inferred bottom geometry back into Link while the native game has
-     * moved him onto the top collision layer (stairs, platforms, raised turf). */
-    if (collisionLayer != 1)
+    /* Supplemental voxel collision only applies when the native bottom layer
+     * participates. Top-only movement (raised platforms/stairs) remains fully
+     * native. COL_LAYER_BOTH is allowed during transitions so the barrier
+     * cannot disappear for a frame while Link walks north into a wall. */
+    if ((collisionLayer & 1) == 0)
         return false;
 
     const int relX = worldX - sVoxelOriginX;
@@ -143,13 +144,17 @@ public_repl = """extern "C" bool Port_Voxel_PlayerSolidAtPixel(int worldX, int w
     if (sVoxelFrontFace[ty * 64 + tx])
         return true;
 
-    /* A camera-facing billboard leans north as it rises. Keep the player's
-     * hitbox a small pitch-dependent distance south of the rendered wall face,
-     * otherwise Link's upper body can visually pass through the cliff/wall
-     * before his native feet collision reaches the source tile. */
-    if (ty > 0 && sVoxelFrontFace[(ty - 1) * 64 + tx]) {
+    /* Direction-aware south-side wall clearance.
+     *
+     * North/NW/NE movement is the case where Link visually enters a tilted
+     * camera-facing wall before the native 2D collision probe reaches the
+     * source tile. Add a small barrier only while approaching that wall from
+     * below. This avoids invisible side/stair collision in the other directions. */
+    const int dir = direction & 0x1F;
+    const bool movingNorth = (dir <= 4) || (dir >= 28);
+    if (movingNorth && ty > 0 && sVoxelFrontFace[(ty - 1) * 64 + tx]) {
         const float pitch = std::abs((float)Port_Config_GetVoxelPitch()) * 3.14159265f / 180.0f;
-        const int clearance = std::clamp((int)std::ceil(std::sin(pitch) * 12.0f), 4, 10);
+        const int clearance = std::clamp(6 + (int)std::ceil(std::sin(pitch) * 10.0f), 8, 15);
         if ((relY & 15) < clearance)
             return true;
     }
@@ -177,7 +182,7 @@ h_anchor = """void Port_Voxel_RequestShot(const char* path);
 h_repl = """void Port_Voxel_RequestShot(const char* path);
 /* 3D-mode occupancy generated from the exact geometry BuildMap rendered.
  * Native movement keeps its original collision and ORs this only for Link. */
-bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer);
+bool Port_Voxel_PlayerSolidAtPixel(int worldX, int worldY, int collisionLayer, int direction);
 
 #ifdef __cplusplus
 }
@@ -211,15 +216,16 @@ if calc < 0:
     raise SystemExit("CalculateEntityTileCollisions not found")
 
 helper = """#ifdef PC_PORT
-static bool32 Port_EntityTileCollision(Entity* entity, const u8* collisionData, s32 x, s32 y, u32 collisionType) {
+static bool32 Port_EntityTileCollision(Entity* entity, const u8* collisionData, s32 x, s32 y, u32 collisionType, u32 direction) {
     bool32 hit = IsTileCollision(collisionData, x, y, collisionType);
-    if (!hit && entity == &gPlayerEntity.base && Port_Voxel_PlayerSolidAtPixel(x, y, entity->collisionLayer))
+    if (!hit && entity == &gPlayerEntity.base && Port_Voxel_PlayerSolidAtPixel(x, y, entity->collisionLayer, direction))
         return TRUE;
     return hit;
 }
 #else
-static bool32 Port_EntityTileCollision(Entity* entity, const u8* collisionData, s32 x, s32 y, u32 collisionType) {
+static bool32 Port_EntityTileCollision(Entity* entity, const u8* collisionData, s32 x, s32 y, u32 collisionType, u32 direction) {
     (void)entity;
+    (void)direction;
     return IsTileCollision(collisionData, x, y, collisionType);
 }
 #endif
@@ -230,9 +236,10 @@ calc = m.index("void CalculateEntityTileCollisions(Entity* this, u32 direction, 
 end = m.index("\n}\n\nbool32 ProcessMovementInternal", calc) + 3
 block = m[calc:end]
 block2 = block.replace("IsTileCollision(collisionData,", "Port_EntityTileCollision(this, collisionData,")
+block2 = block2.replace(", collisionType)", ", collisionType, direction)")
 if block == block2:
     raise SystemExit("no tile-collision calls replaced")
 m = m[:calc] + block2 + m[end:]
 move.write_text(m, encoding="utf-8")
 
-print("Aligned 3D wall-face clearance with native collision layers and rendered height")
+print("Aligned northward 3D wall-plane collision with native layers and rendered height")
