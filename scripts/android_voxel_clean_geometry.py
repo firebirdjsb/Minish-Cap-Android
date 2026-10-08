@@ -19,6 +19,7 @@ old_scene = """bool SceneApplicable(void) {
 new_scene = """bool SceneApplicable(void) {
     const bool structural =
         gMain.task == TASK_GAME && gMain.state == GAMETASK_MAIN &&
+        gMain.substate != GAMEMAIN_SUBTASK &&
         gMapBottom.bgSettings != nullptr && gRoomControls.width != 0 &&
         gRoomControls.width <= 1024 && gRoomControls.height <= 1024 &&
         !(gRoomControls.area == AREA_BEANSTALKS && (gRoomControls.scroll_flags & 1));
@@ -185,9 +186,17 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
             projectedX > -48.0f && projectedX < (float)viewW + 48.0f &&
             projectedY > -48.0f && projectedY < 208.0f;
 
-        if (playerStillInView && std::abs(dx) <= 20.0f && std::abs(dy) <= 20.0f) {
-            stableScrollX = rawScrollX;
-            stableScrollY = rawScrollY;
+        /*
+         * Large-but-real camera scroll deltas must catch up instead of
+         * freezing forever: after a skipped/slow frame the old <=20 gate
+         * rejected every subsequent frame because the gap never shrank.
+         * Reject implausible jumps, and slew toward plausible native camera
+         * motion by at most 20 world pixels per presented frame.
+         */
+        if (playerStillInView && std::abs(dx) <= 96.0f &&
+            std::abs(dy) <= 96.0f) {
+            stableScrollX += std::clamp(dx, -20.0f, 20.0f);
+            stableScrollY += std::clamp(dy, -20.0f, 20.0f);
         } else {
             /* Keep the previous valid perspective camera for this frame. */
             const Uint64 now = SDL_GetTicks();
@@ -228,7 +237,22 @@ new_dirty = """    /*
      */
     static Uint64 sPendingMapKey = 0;
     static int sPendingMapFrames = 0;
+    static int sMeshArea = -1, sMeshRoom = -1;
     bool mapDirty = false;
+
+    /*
+     * Room transitions must never display a previous room's geometry while
+     * the new room map is still being prepared. A room change invalidates
+     * that mesh immediately; first confirmed bottom-map frame rebuilds it.
+     */
+    if (sMeshArea != gRoomControls.area || sMeshRoom != gRoomControls.room) {
+        sMeshArea = gRoomControls.area;
+        sMeshRoom = gRoomControls.room;
+        sMapVertCount = 0;
+        sMapKey = 0;
+        sPendingMapKey = 0;
+        sPendingMapFrames = 0;
+    }
 
     if (sMapVertCount == 0 && roomMapStable) {
         mapDirty = true;
