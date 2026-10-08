@@ -95,11 +95,7 @@ src = src.replace(old_outdoors, new_outdoors, 1)
 # Absorbed overhead tiles are visual overhang, not solid boxes.
 old_geom = """    auto Geom = [&](int x, int y) { return inRoom(x, y) && geom[y * 64 + x] != 0; };
 """
-new_geom = """    auto Geom = [&](int x, int y) {
-        /* geom==2 means "absorbed visual overhang". It must not become a box,
-         * otherwise roofs, door trim and canopy edges are extruded twice. */
-        return inRoom(x, y) && geom[y * 64 + x] == 1;
-    };
+new_geom = """    auto Geom = [&](int x, int y) { return inRoom(x, y) && geom[y * 64 + x] != 0; };
 """
 if old_geom not in src:
     raise SystemExit("Geom lambda not found")
