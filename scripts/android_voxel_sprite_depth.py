@@ -17,10 +17,11 @@ new_call = """        /*
         Uint32 tileParam = o.tile;
         Uint32 rowParam = o.rowParam;
         if (tag.kind == PORT_VOXEL_OAM_ENTITY) {
-            const float nativeFootY = tag.layer == 2 ? kTopLayerLift : 0.0f;
-            const float nativeFootZ = (float)tag.groundY + scrollY;
-            const int packedY = std::clamp((int)std::lround(nativeFootY), -128, 127) + 128;
-            const int packedZ = std::clamp((int)std::lround(nativeFootZ), -2048, 2047) + 2048;
+            /* Anchor depth to the exact physical feet position used for the
+             * card above. In raised/tilted areas, using layer 0 here while the
+             * card itself is at groundHeight makes Link slice through walls. */
+            const int packedY = std::clamp((int)std::lround(elev + 0.5f), -128, 127) + 128;
+            const int packedZ = std::clamp((int)std::lround(entityFootZ), -2048, 2047) + 2048;
             tileParam |= (Uint32)(packedY & 0xFF) << 16;
             rowParam |= 0x80000000u | ((Uint32)(packedZ & 0xFFF) << 16);
         }
@@ -51,7 +52,7 @@ new_main = """void main() {
      * Entity sprite marker/anchor packed by port_voxel.cpp:
      *   aParams.w bit31      = native-feet depth anchor
      *   aParams.w bits16-27 = one shared entity foot Z + 2048
-     *   aParams.y bits16-23 = native collision-layer height + 128
+     *   aParams.y bits16-23 = rendered feet height + 128
      *
      * Keep clip X/Y from the camera-facing tilted card, but use one depth for
      * the entire sprite based on its feet. This reproduces the GBA's foot-row
