@@ -141,14 +141,64 @@ old_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
     const bool obj1d = (gIoMem[0] & 0x40) != 0;
 """
 new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
+    const float rawScrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
+    const float rawScrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
+    const float playerLocalX = (float)(gPlayerEntity.base.x.HALF.HI - gRoomControls.origin_x);
+    const float playerLocalY = (float)(gPlayerEntity.base.y.HALF.HI - gRoomControls.origin_y);
+
     /*
-     * Always follow the live camera. Freezing scroll while BottomMapShown()
-     * briefly misses makes the world pause for a few refreshes and then jump,
-     * which is the visible movement stutter from the S24 capture. Geometry may
-     * stay cached during the transient miss, but camera motion must not.
+     * gRoomControls scroll can transiently jump during room/collision handoff
+     * while the player and room identity have not moved. Feeding that raw jump
+     * into the perspective target shifts the entire 3D room off-screen for
+     * several frames. Accept all normal native camera motion, but reject an
+     * impossible same-room jump unless the player actually teleported too.
      */
-    const float scrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
-    const float scrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
+    static bool haveCamera = false;
+    static float stableScrollX = 0.0f, stableScrollY = 0.0f;
+    static float lastPlayerX = 0.0f, lastPlayerY = 0.0f;
+    static int camArea = -1, camOriginX = 0, camOriginY = 0, camW = 0, camH = 0;
+
+    const bool cameraRoomChanged =
+        camArea != gRoomControls.area ||
+        camOriginX != gRoomControls.origin_x ||
+        camOriginY != gRoomControls.origin_y ||
+        camW != gRoomControls.width ||
+        camH != gRoomControls.height;
+
+    const bool playerTeleported =
+        haveCamera && (std::abs(playerLocalX - lastPlayerX) > 64.0f ||
+                       std::abs(playerLocalY - lastPlayerY) > 64.0f);
+
+    if (!haveCamera || cameraRoomChanged || playerTeleported) {
+        stableScrollX = rawScrollX;
+        stableScrollY = rawScrollY;
+        haveCamera = true;
+        camArea = gRoomControls.area;
+        camOriginX = gRoomControls.origin_x;
+        camOriginY = gRoomControls.origin_y;
+        camW = gRoomControls.width;
+        camH = gRoomControls.height;
+    } else {
+        const float dx = rawScrollX - stableScrollX;
+        const float dy = rawScrollY - stableScrollY;
+        const float projectedX = playerLocalX - rawScrollX;
+        const float projectedY = playerLocalY - rawScrollY;
+        const bool playerStillInView =
+            projectedX > -48.0f && projectedX < (float)viewW + 48.0f &&
+            projectedY > -48.0f && projectedY < 208.0f;
+
+        if (playerStillInView && std::abs(dx) <= 20.0f && std::abs(dy) <= 20.0f) {
+            stableScrollX = rawScrollX;
+            stableScrollY = rawScrollY;
+        }
+        /* else: keep the previous valid perspective camera for this frame. */
+    }
+
+    lastPlayerX = playerLocalX;
+    lastPlayerY = playerLocalY;
+
+    const float scrollX = stableScrollX;
+    const float scrollY = stableScrollY;
     const bool roomMapStable = BottomMapShown();
     const bool obj1d = (gIoMem[0] & 0x40) != 0;
 """
