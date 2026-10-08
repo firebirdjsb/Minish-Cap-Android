@@ -4,6 +4,82 @@ from pathlib import Path
 vox = Path("upstream/tmc/port/port_voxel.cpp")
 src = vox.read_text(encoding="utf-8")
 
+top_fn = """bool TopMapShown(void) {
+    return gMapTop.bgSettings != nullptr && MapShownPct(gMapTop, gMapDataTopSpecial) >= 50;
+}
+"""
+top_helper = top_fn + """
+bool StableTopMapShown(void) {
+    static bool latched = false;
+    static Uint64 missSince = 0;
+    static int lastArea = -1, lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
+
+    const bool roomChanged =
+        lastArea != gRoomControls.area ||
+        lastOriginX != gRoomControls.origin_x ||
+        lastOriginY != gRoomControls.origin_y ||
+        lastW != gRoomControls.width ||
+        lastH != gRoomControls.height;
+    if (roomChanged) {
+        latched = false;
+        missSince = 0;
+        lastArea = gRoomControls.area;
+        lastOriginX = gRoomControls.origin_x;
+        lastOriginY = gRoomControls.origin_y;
+        lastW = gRoomControls.width;
+        lastH = gRoomControls.height;
+    }
+
+    const bool shown = TopMapShown();
+    if (shown) {
+        latched = true;
+        missSince = 0;
+        return true;
+    }
+    if (!latched)
+        return false;
+
+    const Uint64 now = SDL_GetTicks();
+    if (missSince == 0)
+        missSince = now;
+    return now - missSince < 700;
+}
+"""
+if top_fn not in src:
+    raise SystemExit("TopMapShown function not found")
+src = src.replace(top_fn, top_helper, 1)
+
+# BuildMap and foreground compositing must use the same stable top-layer state.
+src = src.replace(
+"""    const bool topBelow = TopMapShown() && (ct & 3) > (cb & 3);
+    const bool hasTop = TopMapShown() && !topBelow;
+""",
+"""    const bool topShownStable = StableTopMapShown();
+    const bool topBelow = topShownStable && (ct & 3) > (cb & 3);
+    const bool hasTop = topShownStable && !topBelow;
+""", 1)
+
+src = src.replace(
+"""            const bool bound = gMapBottom.bgSettings == bgs[i] || (gMapTop.bgSettings == bgs[i] && TopMapShown());
+""",
+"""            const bool bound = gMapBottom.bgSettings == bgs[i] ||
+                               (gMapTop.bgSettings == bgs[i] && StableTopMapShown());
+""", 1)
+
+# Re-introduce ONLY the stable top-state bit into the geometry key. This causes
+# one rebuild when the real top map arrives, but no rebuild on one-frame misses.
+map_key_anchor = """    mix(&cb, sizeof(cb));
+    mix(&ct, sizeof(ct));
+"""
+map_key_repl = """    const bool topStable = StableTopMapShown();
+    mix(&cb, sizeof(cb));
+    mix(&ct, sizeof(ct));
+    mix(&topStable, sizeof(topStable));
+"""
+if map_key_anchor not in src:
+    raise SystemExit("stable MapKey insertion point not found")
+src = src.replace(map_key_anchor, map_key_repl, 1)
+
 # Track top-layer occupancy so tiny overlay scraps aren't lifted into the 3D air.
 old_cover_decl = """    static Uint8 cover[64 * 64]; /* overhead layer: 0 none, 1 partial, 2 opaque */
     static Uint8 solid[64 * 64], geom[64 * 64];
@@ -155,19 +231,19 @@ src = src.replace(old_cover_draw, new_cover_draw, 1)
 old_side_quad = """        Quad(sMapVerts, kMaxMapVerts, n, c, east ? u0 : u0 + 16, v0, east ? u0 + 16 : u0, v0 + 16, 0,
              top ? 128u : 0u, top ? tChar : bChar, (top ? t8 : b8) | 2u | (fill << 20) | (mask << 8));
 """
-new_side_quad = """        if (outdoors) {
-            /* Outdoor cliffs/foliage need their real alpha silhouette. A solid
-             * dominant-colour side turns transparent pixels into tall green
-             * blocks. Do not fill transparent pixels here. */
-            Quad(sMapVerts, kMaxMapVerts, n, c,
-                 east ? u0 : u0 + 16, v0, east ? u0 + 16 : u0, v0 + 16, 0,
-                 top ? 128u : 0u, top ? tChar : bChar,
-                 (top ? t8 : b8) | (mask << 8));
-        } else {
-            /* Indoor generated side faces have no native side artwork. Keep a
-             * clean material instead of repeating doorway/wall symbols sideways. */
-            Quad(sMapVerts, kMaxMapVerts, n, c, 0, 0, 1, 1, 3, fill, 0, 0);
-        }
+new_side_quad = """        /*
+         * Native-looking side extrusion:
+         * sample only the outermost texel column of the real room tile and
+         * stretch that edge through the generated depth. This preserves the
+         * wall/door/cliff/tree palette and trim without rotating an entire
+         * doorway/tree tile onto the side or replacing it with a flat colour.
+         */
+        const float edgeU = east ? (u0 + 15.25f) : (u0 + 0.75f);
+        const Uint32 sideParams =
+            (top ? t8 : b8) | 2u | ((Uint32)fill << 20);
+        Quad(sMapVerts, kMaxMapVerts, n, c,
+             edgeU, v0, edgeU, v0 + 16.0f, 0,
+             top ? 128u : 0u, top ? tChar : bChar, sideParams);
 """
 if old_side_quad not in src:
     raise SystemExit("side face quad not found")
@@ -202,4 +278,4 @@ if old_else not in sh:
 sh = sh.replace(old_else, new_else, 1)
 frag.write_text(sh, encoding="utf-8")
 
-print("Applied clean 3D side materials, true foliage alpha and floor-bound tiny overlays")
+print("Applied stable room top textures, native edge-extruded sides and floor-bound overlays")
