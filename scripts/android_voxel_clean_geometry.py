@@ -24,8 +24,7 @@ new_scene = """bool SceneApplicable(void) {
         !(gRoomControls.area == AREA_BEANSTALKS && (gRoomControls.scroll_flags & 1));
 
     static bool roomLatched = false;
-    static int lastArea = -1;
-    static int lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
+    static int lastArea = -1, lastRoom = -1;
 
     if (!structural) {
         roomLatched = false;
@@ -34,19 +33,12 @@ new_scene = """bool SceneApplicable(void) {
     }
 
     const bool roomChanged =
-        lastArea != gRoomControls.area ||
-        lastOriginX != gRoomControls.origin_x ||
-        lastOriginY != gRoomControls.origin_y ||
-        lastW != gRoomControls.width ||
-        lastH != gRoomControls.height;
+        lastArea != gRoomControls.area || lastRoom != gRoomControls.room;
 
     if (roomChanged) {
         roomLatched = false;
         lastArea = gRoomControls.area;
-        lastOriginX = gRoomControls.origin_x;
-        lastOriginY = gRoomControls.origin_y;
-        lastW = gRoomControls.width;
-        lastH = gRoomControls.height;
+        lastRoom = gRoomControls.room;
     }
 
     if (BottomMapShown())
@@ -103,6 +95,16 @@ if old_geom not in src:
     raise SystemExit("Geom lambda not found")
 src = src.replace(old_geom, new_geom, 1)
 
+# Room number is the stable native identity inside an area.
+room_key_anchor = """    mix(&gRoomControls.area, sizeof(gRoomControls.area));
+"""
+room_key_repl = """    mix(&gRoomControls.area, sizeof(gRoomControls.area));
+    mix(&gRoomControls.room, sizeof(gRoomControls.room));
+"""
+if room_key_anchor not in src:
+    raise SystemExit("MapKey area identity anchor not found")
+src = src.replace(room_key_anchor, room_key_repl, 1)
+
 # Remove transient TopMapShown() from the geometry hash. Real map/layer data is
 # already hashed; a one-frame visibility classification should not rebuild the room.
 old_key = """    const bool topShown = TopMapShown();
@@ -156,15 +158,11 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
     static bool haveCamera = false;
     static float stableScrollX = 0.0f, stableScrollY = 0.0f;
     static float lastPlayerX = 0.0f, lastPlayerY = 0.0f;
-    static int camArea = -1, camOriginX = 0, camOriginY = 0, camW = 0, camH = 0;
+    static int camArea = -1, camRoom = -1;
     static Uint64 lastCameraRejectLog = 0;
 
     const bool cameraRoomChanged =
-        camArea != gRoomControls.area ||
-        camOriginX != gRoomControls.origin_x ||
-        camOriginY != gRoomControls.origin_y ||
-        camW != gRoomControls.width ||
-        camH != gRoomControls.height;
+        camArea != gRoomControls.area || camRoom != gRoomControls.room;
 
     const bool playerTeleported =
         haveCamera && (std::abs(playerLocalX - lastPlayerX) > 64.0f ||
@@ -175,10 +173,7 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
         stableScrollY = rawScrollY;
         haveCamera = true;
         camArea = gRoomControls.area;
-        camOriginX = gRoomControls.origin_x;
-        camOriginY = gRoomControls.origin_y;
-        camW = gRoomControls.width;
-        camH = gRoomControls.height;
+        camRoom = gRoomControls.room;
     } else {
         const float dx = rawScrollX - stableScrollX;
         const float dy = rawScrollY - stableScrollY;
@@ -197,9 +192,9 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
             if (now - lastCameraRejectLog > 500) {
                 std::fprintf(stderr,
                              "[voxel] camera jump rejected raw=(%.1f,%.1f) stable=(%.1f,%.1f) "
-                             "delta=(%.1f,%.1f) playerScreen=(%.1f,%.1f) area=%d\\n",
+                             "delta=(%.1f,%.1f) playerScreen=(%.1f,%.1f) area=%d room=%d\\n",
                              rawScrollX, rawScrollY, stableScrollX, stableScrollY,
-                             dx, dy, projectedX, projectedY, gRoomControls.area);
+                             dx, dy, projectedX, projectedY, gRoomControls.area, gRoomControls.room);
                 lastCameraRejectLog = now;
             }
         }
