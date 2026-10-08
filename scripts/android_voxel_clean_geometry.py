@@ -145,8 +145,10 @@ old_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
 new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
     const float rawScrollX = (float)(gRoomControls.scroll_x - gRoomControls.origin_x);
     const float rawScrollY = (float)(gRoomControls.scroll_y - gRoomControls.origin_y);
-    const float playerLocalX = (float)(gPlayerEntity.base.x.HALF.HI - gRoomControls.origin_x);
-    const float playerLocalY = (float)(gPlayerEntity.base.y.HALF.HI - gRoomControls.origin_y);
+    const float playerWorldX = (float)gPlayerEntity.base.x.HALF.HI;
+    const float playerWorldY = (float)gPlayerEntity.base.y.HALF.HI;
+    const float playerLocalX = playerWorldX - (float)gRoomControls.origin_x;
+    const float playerLocalY = playerWorldY - (float)gRoomControls.origin_y;
 
     /*
      * gRoomControls scroll can transiently jump during room/collision handoff
@@ -165,8 +167,8 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
         camArea != gRoomControls.area || camRoom != gRoomControls.room;
 
     const bool playerTeleported =
-        haveCamera && (std::abs(playerLocalX - lastPlayerX) > 64.0f ||
-                       std::abs(playerLocalY - lastPlayerY) > 64.0f);
+        haveCamera && (std::abs(playerWorldX - lastPlayerX) > 64.0f ||
+                       std::abs(playerWorldY - lastPlayerY) > 64.0f);
 
     if (!haveCamera || cameraRoomChanged || playerTeleported) {
         stableScrollX = rawScrollX;
@@ -200,8 +202,8 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
         }
     }
 
-    lastPlayerX = playerLocalX;
-    lastPlayerY = playerLocalY;
+    lastPlayerX = playerWorldX;
+    lastPlayerY = playerWorldY;
 
     const float scrollX = stableScrollX;
     const float scrollY = stableScrollY;
