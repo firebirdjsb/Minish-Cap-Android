@@ -280,6 +280,23 @@ if old_masks not in src:
     raise SystemExit("run silhouette-mask block not found")
 src = src.replace(old_masks, new_masks, 1)
 
+# Close real east/west room edges too. hAt() already returns zero outside the
+# room, so the old x>0/x<W-1 guards unnecessarily left boundary extrusions open
+# to the black clear colour.
+side_guard_old = """            if (hAt(x - 1, b) < topH && x > 0)
+                sideV(x, r, false, z0, z1, topH, (Uint32)fill, rowMask[r]);
+            if (hAt(x + 1, b) < topH && x < W - 1)
+                sideV(x, r, true, z0, z1, topH, (Uint32)fill, rowMask[r]);
+"""
+side_guard_new = """            if (hAt(x - 1, b) < topH)
+                sideV(x, r, false, z0, z1, topH, fillP, rowMask[r]);
+            if (hAt(x + 1, b) < topH)
+                sideV(x, r, true, z0, z1, topH, fillP, rowMask[r]);
+"""
+if side_guard_old not in src:
+    raise SystemExit("side-face boundary guard block not found")
+src = src.replace(side_guard_old, side_guard_new, 1)
+
 # ---------------------------------------------------------------------------
 # 3. Do not clone edge walls/trees/cliffs 24 tiles into the distance.
 #    Extend only the room's common walkable ground under the perspective view.
