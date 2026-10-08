@@ -34,6 +34,48 @@ if top_fn not in src:
     raise SystemExit("TopMapShown function not found")
 src = src.replace(top_fn, top_helper, 1)
 
+# Cache which hardware BG owns the native bottom/top room maps. During camera
+# scrolling or HDMA hand-off the MapLayer pointer can briefly point elsewhere
+# even though the room did not change. Treating that transient pointer as truth
+# makes the real room BG look "unbound", so it gets composited as a giant
+# one-frame screen-space tree/wall overlay.
+binding_helper = r'''
+int StableBottomLayerBg(void) {
+    static int area = -1, room = -1, bg = -1;
+    if (area != gRoomControls.area || room != gRoomControls.room) {
+        area = gRoomControls.area;
+        room = gRoomControls.room;
+        bg = -1;
+    }
+    const int live = LayerBg(gMapBottom.bgSettings);
+    if (live >= 0 && BottomMapShown())
+        bg = live;
+    return bg >= 0 ? bg : live;
+}
+
+int StableTopLayerBg(void) {
+    static int area = -1, room = -1, bg = -1;
+    if (area != gRoomControls.area || room != gRoomControls.room) {
+        area = gRoomControls.area;
+        room = gRoomControls.room;
+        bg = -1;
+    }
+    const int live = LayerBg(gMapTop.bgSettings);
+    if (live >= 0 && StableTopMapShown())
+        bg = live;
+    return bg >= 0 ? bg : live;
+}
+'''
+stable_top_marker = "bool StableTopMapShown(void) {"
+stable_top_pos = src.find(stable_top_marker)
+if stable_top_pos < 0:
+    raise SystemExit("StableTopMapShown marker not found")
+stable_top_end = src.find("\n}\n", stable_top_pos)
+if stable_top_end < 0:
+    raise SystemExit("StableTopMapShown end not found")
+stable_top_end += 3
+src = src[:stable_top_end] + binding_helper + src[stable_top_end:]
+
 # BuildMap and foreground compositing must use the same stable top-layer state.
 src = src.replace(
 """    const bool topBelow = TopMapShown() && (ct & 3) > (cb & 3);
@@ -45,10 +87,21 @@ src = src.replace(
 """, 1)
 
 src = src.replace(
+"""        const int bottomBg = LayerBg(gMapBottom.bgSettings);
+        const int kb = bottomBg < 0 ? 0 : key(bottomBg);
+""",
+"""        const int bottomBg = StableBottomLayerBg();
+        const int topBg = StableTopLayerBg();
+        const int kb = bottomBg < 0 ? 0 : key(bottomBg);
+""", 1)
+
+src = src.replace(
 """            const bool bound = gMapBottom.bgSettings == bgs[i] || (gMapTop.bgSettings == bgs[i] && TopMapShown());
 """,
-"""            const bool bound = gMapBottom.bgSettings == bgs[i] ||
-                               (gMapTop.bgSettings == bgs[i] && StableTopMapShown());
+"""            /* Use the latched hardware BG ownership, not a one-frame
+             * MapLayer pointer. This prevents native room trees/walls from
+             * being drawn again as a full-screen foreground overlay. */
+            const bool bound = (i == bottomBg) || (i == topBg);
 """, 1)
 
 # Re-introduce ONLY the stable top-state bit into the geometry key. This causes
@@ -302,4 +355,4 @@ if old_else not in sh:
 sh = sh.replace(old_else, new_else, 1)
 frag.write_text(sh, encoding="utf-8")
 
-print("Applied stable room top textures, native edge-extruded sides and floor-bound overlays")
+print("Applied stable room BG ownership, top textures, native side faces and floor-bound overlays")
