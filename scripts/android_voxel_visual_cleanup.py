@@ -150,7 +150,9 @@ old_else = """    } else {
     }
 """
 new_else = """    } else if (vParams.x == 3u) {
-        idx = vParams.y & 255u;
+        uint material = vParams.y & 255u;
+        oColor = vec4(texelFetch(uPal, ivec2(int(material), 0), 0).rgb, 1.0);
+        return;
     } else {
         vec4 c = texelFetch(uBg0, ivec2(p.x, p.y + int(vParams.y)), 0);
         if (c.a == 0.0)
