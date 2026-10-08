@@ -40,30 +40,79 @@ src = src.replace(top_fn, top_helper, 1)
 # makes the real room BG look "unbound", so it gets composited as a giant
 # one-frame screen-space tree/wall overlay.
 binding_helper = r'''
+/* A MapLayer pointer may be reassigned for a transient HDMA/BG frame. Do not
+ * reclassify an entire native room BG as an overlay on that one frame. A real
+ * BG ownership change must be confirmed by successive matching room frames. */
 int StableBottomLayerBg(void) {
     static int area = -1, room = -1, bg = -1;
+    static int pending = -1, pendingFrames = 0;
     if (area != gRoomControls.area || room != gRoomControls.room) {
         area = gRoomControls.area;
         room = gRoomControls.room;
-        bg = -1;
+        bg = pending = -1;
+        pendingFrames = 0;
     }
     const int live = LayerBg(gMapBottom.bgSettings);
-    if (live >= 0 && BottomMapShown())
-        bg = live;
-    return bg >= 0 ? bg : live;
+    if (live >= 0 && BottomMapShown()) {
+        if (bg < 0) {
+            bg = live;
+        } else if (live != bg) {
+            if (pending != live) {
+                pending = live;
+                pendingFrames = 1;
+            } else if (++pendingFrames >= 5) {
+                std::fprintf(stderr,
+                             "[voxel] bottom room BG ownership %d -> %d area=%d room=%d\\n",
+                             bg, live, area, room);
+                bg = live;
+                pending = -1;
+                pendingFrames = 0;
+            }
+        } else {
+            pending = -1;
+            pendingFrames = 0;
+        }
+    } else {
+        pending = -1;
+        pendingFrames = 0;
+    }
+    return bg;
 }
 
 int StableTopLayerBg(void) {
     static int area = -1, room = -1, bg = -1;
+    static int pending = -1, pendingFrames = 0;
     if (area != gRoomControls.area || room != gRoomControls.room) {
         area = gRoomControls.area;
         room = gRoomControls.room;
-        bg = -1;
+        bg = pending = -1;
+        pendingFrames = 0;
     }
     const int live = LayerBg(gMapTop.bgSettings);
-    if (live >= 0 && StableTopMapShown())
-        bg = live;
-    return bg >= 0 ? bg : live;
+    if (live >= 0 && TopMapShown()) {
+        if (bg < 0) {
+            bg = live;
+        } else if (live != bg) {
+            if (pending != live) {
+                pending = live;
+                pendingFrames = 1;
+            } else if (++pendingFrames >= 5) {
+                std::fprintf(stderr,
+                             "[voxel] top room BG ownership %d -> %d area=%d room=%d\\n",
+                             bg, live, area, room);
+                bg = live;
+                pending = -1;
+                pendingFrames = 0;
+            }
+        } else {
+            pending = -1;
+            pendingFrames = 0;
+        }
+    } else {
+        pending = -1;
+        pendingFrames = 0;
+    }
+    return bg;
 }
 '''
 stable_top_marker = "bool StableTopMapShown(void) {"
@@ -101,7 +150,12 @@ src = src.replace(
 """            /* Use the latched hardware BG ownership, not a one-frame
              * MapLayer pointer. This prevents native room trees/walls from
              * being drawn again as a full-screen foreground overlay. */
-            const bool bound = (i == bottomBg) || (i == topBg);
+            /* Exclude both the stable owner and a newly verified live owner
+             * during a BG transition; neither is a screen-space foreground. */
+            const bool bound =
+                i == bottomBg || i == topBg ||
+                (i == LayerBg(gMapBottom.bgSettings) && BottomMapShown()) ||
+                (i == LayerBg(gMapTop.bgSettings) && TopMapShown());
 """, 1)
 
 # Re-introduce ONLY the stable top-state bit into the geometry key. This causes
