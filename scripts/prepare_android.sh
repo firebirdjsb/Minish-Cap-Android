@@ -35,6 +35,7 @@ python3 "$ROOT/scripts/fix_android_single_screen_present.py"
 python3 "$ROOT/scripts/android_native_aspect_modes.py"
 python3 "$ROOT/scripts/android_gpu_raster_sync.py"
 python3 "$ROOT/scripts/android_voxel_clean_geometry.py"
+python3 "$ROOT/scripts/android_voxel_visual_cleanup.py"
 python3 "$ROOT/scripts/android_voxel_sprite_depth.py"
 command -v glslangValidator >/dev/null 2>&1 || { echo "glslangValidator is required for voxel shader rebuild"; exit 1; }
 bash "$UPSTREAM/port/shaders/build.sh"
