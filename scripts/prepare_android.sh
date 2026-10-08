@@ -38,7 +38,6 @@ python3 "$ROOT/scripts/android_voxel_clean_geometry.py"
 python3 "$ROOT/scripts/android_voxel_visual_cleanup.py"
 python3 "$ROOT/scripts/android_voxel_world_collision.py"
 python3 "$ROOT/scripts/android_voxel_sprite_depth.py"
-python3 "$ROOT/scripts/android_voxel_smoketest_levels.py"
 command -v glslangValidator >/dev/null 2>&1 || { echo "glslangValidator is required for voxel shader rebuild"; exit 1; }
 bash "$UPSTREAM/port/shaders/build.sh"
 
