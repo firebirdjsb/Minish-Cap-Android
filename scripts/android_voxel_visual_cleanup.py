@@ -104,7 +104,9 @@ old_cover_draw = """                if (Cover(x, y)) {
 """
 new_cover_draw = """                if (Cover(x, y)) {
                     if (coverPixels[t] < 24) {
-                        flatL(true, x, x, y, d + 0.25f, y * 16.0f, y * 16.0f + 16, 0);
+                        /* Tiny isolated top-map scraps become floating black
+                         * glyphs in perspective. They are not meaningful room
+                         * surfaces, so leave the native bottom floor visible. */
                     } else {
                         int clear = 0;
                         for (int i = 0; i < 256; i += 3)
