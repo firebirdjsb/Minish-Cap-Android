@@ -62,7 +62,7 @@ int StableBottomLayerBg(void) {
                 pendingFrames = 1;
             } else if (++pendingFrames >= 5) {
                 std::fprintf(stderr,
-                             "[voxel] bottom room BG ownership %d -> %d area=%d room=%d\\n",
+                             "[voxel] bottom room BG ownership %d -> %d area=%d room=%d\n",
                              bg, live, area, room);
                 bg = live;
                 pending = -1;
@@ -98,7 +98,7 @@ int StableTopLayerBg(void) {
                 pendingFrames = 1;
             } else if (++pendingFrames >= 5) {
                 std::fprintf(stderr,
-                             "[voxel] top room BG ownership %d -> %d area=%d room=%d\\n",
+                             "[voxel] top room BG ownership %d -> %d area=%d room=%d\n",
                              bg, live, area, room);
                 bg = live;
                 pending = -1;
@@ -247,7 +247,13 @@ old_masks = """        Uint32 rowMask[64] = {};
 """
 new_masks = """        Uint32 rowMask[64] = {};
         bool anyMask = false;
-        if (outdoors && !rn.ledge)
+        /*
+         * Do not punch holes into connected tree, cliff or log extrusions:
+         * masks there make the 3D run see-through/lanky and delete treetops
+         * at steep camera angles. Only isolated one-tile foliage may have
+         * per-pixel cutouts. Native standalone props keep their own masks.
+         */
+        if (outdoors && !rn.ledge && yt == yb)
             for (int r = yt; r <= yb; ++r)
                 if (Foliage(x, r))
                     anyMask |= (rowMask[r] = visibleMask(x, r)) != 0;
