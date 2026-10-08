@@ -157,6 +157,7 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
     static float stableScrollX = 0.0f, stableScrollY = 0.0f;
     static float lastPlayerX = 0.0f, lastPlayerY = 0.0f;
     static int camArea = -1, camOriginX = 0, camOriginY = 0, camW = 0, camH = 0;
+    static Uint64 lastCameraRejectLog = 0;
 
     const bool cameraRoomChanged =
         camArea != gRoomControls.area ||
@@ -190,8 +191,18 @@ new_scroll = """    const int viewW = Port_Widescreen_EffectiveViewWidth();
         if (playerStillInView && std::abs(dx) <= 20.0f && std::abs(dy) <= 20.0f) {
             stableScrollX = rawScrollX;
             stableScrollY = rawScrollY;
+        } else {
+            /* Keep the previous valid perspective camera for this frame. */
+            const Uint64 now = SDL_GetTicks();
+            if (now - lastCameraRejectLog > 500) {
+                std::fprintf(stderr,
+                             "[voxel] camera jump rejected raw=(%.1f,%.1f) stable=(%.1f,%.1f) "
+                             "delta=(%.1f,%.1f) playerScreen=(%.1f,%.1f) area=%d\\n",
+                             rawScrollX, rawScrollY, stableScrollX, stableScrollY,
+                             dx, dy, projectedX, projectedY, gRoomControls.area);
+                lastCameraRejectLog = now;
+            }
         }
-        /* else: keep the previous valid perspective camera for this frame. */
     }
 
     lastPlayerX = playerLocalX;
@@ -235,6 +246,11 @@ new_dirty = """    /*
         }
         if (sPendingMapFrames >= 3) {
             mapDirty = true;
+            std::fprintf(stderr,
+                         "[voxel] stable mesh rebuild area=%d key=%016llx old=%016llx\\n",
+                         gRoomControls.area,
+                         (unsigned long long)mapKey,
+                         (unsigned long long)sMapKey);
             sPendingMapKey = 0;
             sPendingMapFrames = 0;
         }
