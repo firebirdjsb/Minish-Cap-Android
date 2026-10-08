@@ -88,6 +88,32 @@ if old_masks not in src:
     raise SystemExit("post-clean foliage mask block not found")
 src = src.replace(old_masks, new_masks, 1)
 
+# Indoor doorway trim often appears as absorbed top-layer overhang on a
+# walkable tile between solid wall tiles. Keep that art visual instead of
+# classifying the opening itself as a solid 3D wall run.
+geom_old = """    auto Geom = [&](int x, int y) { return inRoom(x, y) && geom[y * 64 + x] != 0; };
+"""
+geom_new = """    auto Geom = [&](int x, int y) {
+        if (!inRoom(x, y))
+            return false;
+        const int t = y * 64 + x;
+        if (!geom[t])
+            return false;
+        if (!outdoors && geom[t] == 2 && !solid[t]) {
+            const bool lr = inRoom(x - 1, y) && inRoom(x + 1, y) &&
+                            solid[y * 64 + (x - 1)] && solid[y * 64 + (x + 1)];
+            const bool ud = inRoom(x, y - 1) && inRoom(x, y + 1) &&
+                            solid[(y - 1) * 64 + x] && solid[(y + 1) * 64 + x];
+            if (lr || ud)
+                return false;
+        }
+        return true;
+    };
+"""
+if geom_old not in src:
+    raise SystemExit("Geom lambda not found for doorway cleanup")
+src = src.replace(geom_old, geom_new, 1)
+
 # Tiny top-layer fragments are common decorative/shadow scraps. Raising them
 # one tile turns them into floating black glyphs in perspective. Keep them
 # composited just above their native floor instead.
@@ -103,10 +129,10 @@ old_cover_draw = """                if (Cover(x, y)) {
                 }
 """
 new_cover_draw = """                if (Cover(x, y)) {
-                    if (coverPixels[t] < 24) {
-                        /* Tiny isolated top-map scraps become floating black
-                         * glyphs in perspective. They are not meaningful room
-                         * surfaces, so leave the native bottom floor visible. */
+                    if (outdoors && coverPixels[t] < 24) {
+                        /* Outdoor tiny top-map scraps become floating black
+                         * glyphs in perspective. Indoors, small overlays are
+                         * often legitimate doorway/workshop/wall details. */
                     } else {
                         int clear = 0;
                         for (int i = 0; i < 256; i += 3)
@@ -129,11 +155,19 @@ src = src.replace(old_cover_draw, new_cover_draw, 1)
 old_side_quad = """        Quad(sMapVerts, kMaxMapVerts, n, c, east ? u0 : u0 + 16, v0, east ? u0 + 16 : u0, v0 + 16, 0,
              top ? 128u : 0u, top ? tChar : bChar, (top ? t8 : b8) | 2u | (fill << 20) | (mask << 8));
 """
-new_side_quad = """        (void)u0;
-        (void)v0;
-        (void)top;
-        (void)mask;
-        Quad(sMapVerts, kMaxMapVerts, n, c, 0, 0, 1, 1, 3, fill, 0, 0);
+new_side_quad = """        if (outdoors) {
+            /* Outdoor cliffs/foliage need their real alpha silhouette. A solid
+             * dominant-colour side turns transparent pixels into tall green
+             * blocks. Do not fill transparent pixels here. */
+            Quad(sMapVerts, kMaxMapVerts, n, c,
+                 east ? u0 : u0 + 16, v0, east ? u0 + 16 : u0, v0 + 16, 0,
+                 top ? 128u : 0u, top ? tChar : bChar,
+                 (top ? t8 : b8) | (mask << 8));
+        } else {
+            /* Indoor generated side faces have no native side artwork. Keep a
+             * clean material instead of repeating doorway/wall symbols sideways. */
+            Quad(sMapVerts, kMaxMapVerts, n, c, 0, 0, 1, 1, 3, fill, 0, 0);
+        }
 """
 if old_side_quad not in src:
     raise SystemExit("side face quad not found")
