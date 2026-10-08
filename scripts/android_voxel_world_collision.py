@@ -85,9 +85,19 @@ sprite_repl = """        const float x0 = o.x + scrollX, x1 = x0 + o.w;
                                    : std::max<int>(tag.groundY, sy1);
         const float entityFootZ = (float)entityFoot + scrollY;
         const float entityCenterX = (x0 + x1) * 0.5f;
-        const float groundHeight =
-            RoomHeightAt(entityCenterX, entityFootZ);
-        const float nativeLayerHeight = (tag.layer & 0x7Fu) == 2 ? kTopLayerLift : 0.0f;
+        /*
+         * Collision-layer authority: a wall/tree visual footprint can share
+         * the player's tile even when that tile is still walkable. Never
+         * auto-lift a bottom-layer entity onto that decorative extrusion.
+         * Use the renderer height field only for entities that the native
+         * game has explicitly put on its raised collision layer.
+         */
+        const int nativeCollisionLayer = (int)(tag.layer & 0x7Fu);
+        const float nativeLayerHeight =
+            nativeCollisionLayer == 2 ? kTopLayerLift : 0.0f;
+        const float groundHeight = nativeCollisionLayer == 2
+                                       ? RoomHeightAt(entityCenterX, entityFootZ)
+                                       : 0.0f;
         const float elev = tag.kind == PORT_VOXEL_OAM_ENTITY
                                ? std::max(groundHeight, nativeLayerHeight)
                                : nativeLayerHeight;
