@@ -17,18 +17,16 @@ state_anchor = """const AreaShapes* sBuildShapes = nullptr; /* CurrentShapes() f
 state_repl = state_anchor + """
 static float sVoxelHeight[64 * 64] = {};
 static int sVoxelHeightW = 0, sVoxelHeightH = 0;
-static int sVoxelHeightOriginX = 0, sVoxelHeightOriginY = 0;
-static int sVoxelHeightArea = -1;
+static int sVoxelHeightArea = -1, sVoxelHeightRoom = -1;
 static bool sVoxelHeightValid = false;
 
-float WorldHeightAt(float worldX, float worldZ) {
+float RoomHeightAt(float roomX, float roomZ) {
     if (!sVoxelHeightValid || sVoxelHeightArea != gRoomControls.area ||
-        sVoxelHeightOriginX != gRoomControls.origin_x ||
-        sVoxelHeightOriginY != gRoomControls.origin_y)
+        sVoxelHeightRoom != gRoomControls.room)
         return 0.0f;
 
-    const int tx = (int)std::floor((worldX - (float)sVoxelHeightOriginX) / 16.0f);
-    const int ty = (int)std::floor((worldZ - (float)sVoxelHeightOriginY) / 16.0f);
+    const int tx = (int)std::floor(roomX / 16.0f);
+    const int ty = (int)std::floor(roomZ / 16.0f);
     if (tx < 0 || ty < 0 || tx >= sVoxelHeightW || ty >= sVoxelHeightH)
         return 0.0f;
     return sVoxelHeight[ty * 64 + tx];
@@ -57,9 +55,8 @@ height_anchor = """    auto hAt = [&](int x, int b) { return inRoom(x, b) ? hmap
 """
 height_repl = """    sVoxelHeightW = W;
     sVoxelHeightH = H;
-    sVoxelHeightOriginX = gRoomControls.origin_x;
-    sVoxelHeightOriginY = gRoomControls.origin_y;
     sVoxelHeightArea = gRoomControls.area;
+    sVoxelHeightRoom = gRoomControls.room;
     std::memset(sVoxelHeight, 0, sizeof(sVoxelHeight));
     for (int cy = 0; cy < H; ++cy)
         for (int cx = 0; cx < W; ++cx)
@@ -89,8 +86,7 @@ sprite_repl = """        const float x0 = o.x + scrollX, x1 = x0 + o.w;
         const float entityFootZ = (float)entityFoot + scrollY;
         const float entityCenterX = (x0 + x1) * 0.5f;
         const float groundHeight =
-            WorldHeightAt(entityCenterX + gRoomControls.origin_x,
-                          entityFootZ + gRoomControls.origin_y);
+            RoomHeightAt(entityCenterX, entityFootZ);
         const float nativeLayerHeight = tag.layer == 2 ? kTopLayerLift : 0.0f;
         const float elev = tag.kind == PORT_VOXEL_OAM_ENTITY
                                ? std::max(groundHeight, nativeLayerHeight)
