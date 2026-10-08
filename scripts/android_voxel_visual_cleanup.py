@@ -11,21 +11,14 @@ top_fn = """bool TopMapShown(void) {
 top_helper = top_fn + """
 bool StableTopMapShown(void) {
     static bool latched = false;
-    static int lastArea = -1, lastOriginX = 0, lastOriginY = 0, lastW = 0, lastH = 0;
+    static int lastArea = -1, lastRoom = -1;
 
     const bool roomChanged =
-        lastArea != gRoomControls.area ||
-        lastOriginX != gRoomControls.origin_x ||
-        lastOriginY != gRoomControls.origin_y ||
-        lastW != gRoomControls.width ||
-        lastH != gRoomControls.height;
+        lastArea != gRoomControls.area || lastRoom != gRoomControls.room;
     if (roomChanged) {
         latched = false;
         lastArea = gRoomControls.area;
-        lastOriginX = gRoomControls.origin_x;
-        lastOriginY = gRoomControls.origin_y;
-        lastW = gRoomControls.width;
-        lastH = gRoomControls.height;
+        lastRoom = gRoomControls.room;
     }
 
     if (TopMapShown())
