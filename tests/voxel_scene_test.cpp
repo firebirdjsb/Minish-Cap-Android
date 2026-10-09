@@ -300,7 +300,7 @@ static void townGroundFidelity() {
         if (q.p[0] == 0 && q.p[1] == 0 &&
             q.pos[0] < 0 && q.pos[2] >= 32 && q.pos[2] < 96) {
             assert(tx < 8 && ty < 8);
-            assert(gMapBottom.mapData[ty * 64 + tx] == 1);
+            assert(gMapBottom.mapData[ty * 64 + tx] == 0); // resetScene uses native tile index zero as perimeter grass
             skirtUsesGrass = true;
         }
     }
