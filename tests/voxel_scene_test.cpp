@@ -565,6 +565,35 @@ static void pr210CuratedTileShapes() {
     assert(kDefaultWallTiles == 1);
 }
 
+static void fullNativeNorthWall() {
+    // Ordinary two-row room back walls must preserve BOTH 16px facade art
+    // rows on a SINGLE north-facing plane. Previously the upper row became
+    // a duplicated horizontal roof stripe and the room lost wall furniture.
+    resetScene(false, 8, 10);
+    for (int x = 0; x < 8; ++x)
+        for (int y = 0; y < 2; ++y)
+            block(x, y);
+    BuildMap();
+    bool rows[2] = {};
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& a = sMapVerts[i];
+        const auto& b = sMapVerts[i + 1];
+        const auto& c = sMapVerts[i + 2];
+        if (a.p[0] != 0 || a.p[1] != 0)
+            continue;
+        const int tx = (a.p[2] >> 16) & 63;
+        const int ty = (a.p[2] >> 22) & 63;
+        if (tx != 3 || ty > 1)
+            continue;
+        if (a.pos[2] == 32 && b.pos[2] == 32 && c.pos[2] == 32) {
+            assert(a.pos[1] == (2 - ty) * 16.0f);
+            assert(b.pos[1] == (1 - ty) * 16.0f);
+            rows[ty] = true;
+        }
+    }
+    assert(rows[0] && rows[1]);
+}
+
 static void nativeBridgeDepthAndIndoorLayering() {
     resetScene(true, 12, 12);
     // A long thin BG2 deck across passable bottom-map ground must be
@@ -643,6 +672,7 @@ int main() {
     pr210CuratedTileShapes();
     nativeJumpEdgesAndScenery();
     indoorNativeUnderlay();
+    fullNativeNorthWall();
     nativeBridgeDepthAndIndoorLayering();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
