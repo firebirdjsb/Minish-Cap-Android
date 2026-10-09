@@ -51,6 +51,54 @@ struct LayerBinding {
     }
 };
 
+/* Room loading is not atomic: native collision, BG1/BG2 ownership,
+ * characters and palette may arrive across several game frames. The mesh
+ * classifier reads ALL of these, so rendering after the bottom map alone
+ * briefly exposes bare roof beams and scrambled sides. Only the FIRST mesh
+ * of a room needs a longer handoff; ordinary animated room updates retain
+ * MeshGate's shorter three-frame stabilization.
+ *
+ * The top layer may legitimately be unused in a room. Wait for a confirmed
+ * top binding when one is configured, with a bounded fallback so bottom-only
+ * rooms are never locked out of 3D.
+ */
+struct RoomBootstrap {
+    std::uint64_t previous = 0;
+    int frames = 0;
+    int unchanged = 0;
+    bool ready = false;
+
+    bool observe(bool bottomReady, bool expectsTop, bool topReady,
+                 std::uint64_t graphicsSignature) {
+        if (ready)
+            return true;
+        if (!bottomReady) {
+            // A transition frame is not a meaningful sample. A later room
+            // update must establish a fresh run of stable graphics.
+            unchanged = 0;
+            return false;
+        }
+        ++frames;
+        if (unchanged && previous == graphicsSignature)
+            ++unchanged;
+        else {
+            previous = graphicsSignature;
+            unchanged = 1;
+        }
+
+        // Even when bottom arrives first, allow time for the top map and
+        // animated tile graphics to be uploaded by the native loader.
+        const int minimum = expectsTop && !topReady ? 48 : 14;
+        if (frames < minimum)
+            return false;
+        if (expectsTop && !topReady && frames < 48)
+            return false;
+        if (unchanged >= 8 || frames >= 96)
+            ready = true; // bounded if native BG animation changes every tick
+        return ready;
+    }
+};
+
 struct MeshGate {
     std::uint64_t pending = 0, accepted = 0;
     int frames = 0;
