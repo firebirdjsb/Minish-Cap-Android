@@ -221,10 +221,16 @@ static void twoRowDoorframes() {
         const auto& b = sMapVerts[i + 1];
         const auto& c = sMapVerts[i + 2];
         const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
-        if (a.p[0] == 0 && a.p[1] == 0 && tx >= 2 && tx <= 4 && ty <= 1 &&
+        const int physicalX = (int)std::lround(a.pos[0] / 16.0f);
+        if (a.p[0] == 0 && a.p[1] == 0 &&
+            physicalX >= 2 && physicalX <= 4 && ty <= 1 &&
             a.pos[2] == 32 && b.pos[2] == 32 && c.pos[2] == 32) {
             assert(a.pos[1] == (2 - ty) * 16.0f && b.pos[1] == (1 - ty) * 16.0f);
-            ++north[tx - 2][ty];
+            // The arch centre retains native UVs; its flanking jambs
+            // intentionally sample ordinary neighbouring wall trim, which
+            // eliminates the visible placeholder glyph from their art.
+            assert(tx == (physicalX == 2 ? 1 : physicalX == 4 ? 5 : 3));
+            ++north[physicalX - 2][ty];
         }
     }
     // The true passage centre has two 16px frame rows. Adjacent jamb
