@@ -48,6 +48,7 @@ python3 "$ROOT/scripts/android_voxel_pr210.py"
 python3 "$ROOT/scripts/android_voxel_heart_pulse.py"
 python3 "$ROOT/scripts/android_voxel_room_ledge_fidelity.py"
 python3 "$ROOT/scripts/android_voxel_room_bridge_fidelity.py"
+python3 "$ROOT/scripts/android_voxel_pr213_scroll.py"
 command -v glslangValidator >/dev/null 2>&1 || { echo "glslangValidator is required for voxel shader rebuild"; exit 1; }
 bash "$UPSTREAM/port/shaders/build.sh"
 
