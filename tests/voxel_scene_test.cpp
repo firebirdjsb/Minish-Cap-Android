@@ -161,6 +161,47 @@ static void indoorDoorsAndScraps() {
     assert(eastDoorBands[0] == 1 && eastDoorBands[1] == 1);
 }
 
+static void longIndoorSideWall() {
+    resetScene(false, 8, 10);
+    for (int y = 0; y < 10; ++y)
+        if (y != 5) {
+            block(0, y);
+            block(1, y);
+            block(6, y);
+            block(7, y);
+        }
+    // Native side-door collision (0x23) appears in both two-column openings.
+    for (int x : {0, 1, 6, 7}) {
+        gMapBottom.collisionData[5 * 64 + x] = 0x23;
+        tile(gMapDataBottomSpecial, x, 5, 2);
+    }
+    BuildMap();
+
+    int doorwayBands[4] = {};
+    bool rowTwoSide[2] = {};
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& a = sMapVerts[i];
+        const auto& b = sMapVerts[i + 2];
+        const auto& c = sMapVerts[i + 1];
+        if (a.p[0] != 0 || a.p[1] != 0)
+            continue;
+        const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
+        if (ty == 5 && (tx < 2 || tx >= 6)) {
+            const float plane = tx < 2 ? 32.0f : 96.0f;
+            assert(a.pos[0] == plane && b.pos[0] == plane && c.pos[0] == plane);
+            ++doorwayBands[tx < 2 ? tx : tx - 4];
+        }
+        if (ty == 2 && (tx == 1 || tx == 6)) {
+            const float plane = tx == 1 ? 32.0f : 96.0f;
+            if (a.pos[0] == plane && b.pos[0] == plane && c.pos[0] == plane &&
+                a.pos[2] >= 32 && b.pos[2] <= 48)
+                rowTwoSide[tx == 1 ? 0 : 1] = true;
+        }
+    }
+    for (int count : doorwayBands) assert(count == 1);
+    assert(rowTwoSide[0] && rowTwoSide[1]); // long walls sample their current row
+}
+
 static void ledgeAndCapacity() {
     resetScene(true);
     block(2, 2);
@@ -289,6 +330,7 @@ static void aspects() {
 int main() {
     outdoorRuns();
     indoorDoorsAndScraps();
+    longIndoorSideWall();
     ledgeAndCapacity();
     transitionsAndBindings();
     movementAndOcclusion();
