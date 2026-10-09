@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final 3D quality pass: deeper terrain, automatic geometry heights, doorway validation.
+"""Final 3D quality pass: deeper terrain, one-tile walls, doorway validation.
 
 Runs on the *prepared upstream* after scene_fix, room_edges and town_fidelity.
 Keeps the 2D renderer and native collision unchanged. Every code anchor is
@@ -29,37 +29,15 @@ replace_one(
 )
 replace_one("    constexpr int kGroundMargin = 40;", "    constexpr int kGroundMargin = 64;")
 
-# User-adjusted global wall heights create broken rooftops in other areas.
-# Leave the default one tile, automatically promote *only* real continuous
-# native collision-backed multi-row structures inside BuildMap.
+# A wide/connected wall is not necessarily a taller wall. Automatic
+# two- and three-tile promotion made outdoor cliffs and roofs bulky and
+# distorted the source art. Preserve the renderer's single-tile default for
+# every ordinary inferred solid run, irrespective of neighbouring runs.
+# Genuine multi-row doorway artwork remains explicitly handled by the
+# topology-aware room-edge pass; native collision layers still control actors.
 replace_one(
     "    const int wallTiles = sBuildShapes ? sBuildShapes->wall : kDefaultWallTiles;",
-    "    const int wallTiles = kDefaultWallTiles; /* intrinsic, not user-configurable */",
-)
-replace_one(
-    "            rn.face = std::min(len, wallTiles);",
-    """            // Native collision topology controls internal wall level count.
-            // Single props and small scenery stay one tile high. Wider,
-            // genuinely connected structures can have two or three tile
-            // height bands without a user-visible height selector.
-            int adjacentRuns = 0;
-            if (len >= 3 && solid[yb * 64 + x]) {
-                for (int dx : {-1, 1}) {
-                    if (!inRoom(x + dx, yb) || yb - 2 < yt)
-                        continue;
-                    bool continued = true;
-                    for (int row = yb - 2; row <= yb; ++row)
-                        continued &= solid[row * 64 + x + dx] != 0;
-                    if (continued)
-                        ++adjacentRuns;
-                }
-            }
-            int nativeFaceTiles = wallTiles;
-            if (adjacentRuns >= 1 && len >= 3)
-                nativeFaceTiles = 2;
-            if (adjacentRuns == 2 && len >= 5)
-                nativeFaceTiles = 3;
-            rn.face = std::min(len, nativeFaceTiles);""",
+    "    const int wallTiles = kDefaultWallTiles; /* single tile for inferred walls */",
 )
 
 # False-positive north "arches" on patterned walls are a known source of
@@ -127,8 +105,8 @@ replace_one(
 )
 voxel.write_text(view, encoding="utf-8")
 
-# 3D levels and shape classification are automatic. Keep view toggle and
-# camera pitch control but no wall-height or per-tile user-editing controls.
+# Native collision layers and explicit doorway geometry remain internal.
+# Keep the camera pitch control, not user-adjustable wall height or tile shape.
 display = root / "upstream/tmc/port/port_imgui_display_tab.inc"
 ui = display.read_text(encoding="utf-8")
 start = "        /* Phase-3 shape editor: fix what the height heuristic misreads, per"
@@ -150,4 +128,4 @@ ui = ui[:a] + """        // Geometry height and classification are managed by th
 
 """ + ui[b:]
 display.write_text(ui, encoding="utf-8")
-print("Applied 64-tile view extension, native terrain BG materials, internal height inference and verified doorframe geometry")
+print("Applied 64-tile view extension, native terrain BG materials, one-tile inferred walls and verified doorframe geometry")
