@@ -144,9 +144,9 @@ patch(
     """        // Nearby native material search is for outdoor town ground ONLY.
         // Indoors, the normal room ground source rule must not sample a side
         // door's bottom-map jamb tiles as walkable art (fake glyph floors).
-        if (outdoors)
+        if (outdoors) {
             for (int radius = 2; radius <= 6; ++radius)
-            for (int dy = -radius; dy <= radius; ++dy) {
+                for (int dy = -radius; dy <= radius; ++dy) {
                 const int adx = radius - std::abs(dy);
                 for (int sign : {-1, 1}) {
                     if (adx == 0 && sign < 0) continue;
@@ -158,7 +158,8 @@ patch(
                         return true;
                     }
                 }
-            }
+                }
+        }
         ux = groundX, uy = groundY;
         return groundX >= 0;""")
 
