@@ -485,6 +485,63 @@ static void offscreenOamVisibility() {
     assert(!Port_Voxel_IsDrawing());
 }
 
+static void nativeJumpEdgesAndScenery() {
+    // PR210 visual overrides MUST NOT turn game-defined jump-off cliff
+    // edges or passable plants into solid geometry.
+    resetScene(true);
+    gMapBottom.tileTypes[2] = 123; // curated BLOCK art, not native collision
+    gMapBottom.mapData[2 * 64 + 2] = 2;
+    sShapes[0].tiles[123] = PORT_VOXEL_SHAPE_BLOCK;
+    BuildMap();
+    assert(sVoxelHeight[2 * 64 + 2] == 0.0f);
+    for (int i = 0; i < sFrontCount; ++i)
+        assert(sFrontFaces[i].tile != 2 * 64 + 2);
+
+    resetScene(true);
+    gMapBottom.tileTypes[2] = 123;
+    gMapBottom.mapData[2 * 64 + 2] = 2;
+    gMapBottom.collisionData[2 * 64 + 2] = 0x0f;
+    gMapBottom.actTiles[2 * 64 + 2] = 116; // native SURFACE_EDGE
+    sShapes[0].tiles[123] = PORT_VOXEL_SHAPE_BLOCK;
+    tile(gMapDataTopSpecial, 2, 2, 2); // absorption also must stay flat
+    block(3, 2); // structural neighbour
+    BuildMap();
+    assert(sVoxelHeight[2 * 64 + 2] == 0.0f);
+    for (int i = 0; i < sFrontCount; ++i)
+        assert(sFrontFaces[i].tile != 2 * 64 + 2);
+
+    resetScene(true);
+    gMapBottom.tileTypes[2] = 28; // small native grass / cut bush art
+    gMapBottom.mapData[2 * 64 + 2] = 2;
+    block(2, 2);
+    sShapes[0].tiles[28] = PORT_VOXEL_SHAPE_BLOCK;
+    BuildMap();
+    assert(sVoxelHeight[2 * 64 + 2] == 0.0f); // no erroneous cube
+    for (int i = 0; i < sFrontCount; ++i)
+        assert(sFrontFaces[i].tile != 2 * 64 + 2);
+}
+
+static void indoorNativeUnderlay() {
+    resetScene(false);
+    sTopBinding.control = 7; // native top BG priority is lower than bottom
+    tile(gMapDataTopSpecial, 3, 3, 2);
+    BuildMap();
+    bool found = false;
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& a = sMapVerts[i];
+        if (a.p[0] != 0 || a.p[1] != 128)
+            continue;
+        const int tx = (a.p[2] >> 16) & 63;
+        const int ty = (a.p[2] >> 22) & 63;
+        if (tx == 3 && ty == 3) {
+            assert(a.pos[1] >= -1.0f && a.pos[1] < 0.0f);
+            assert(a.pos[2] >= 48.0f && a.pos[2] <= 64.0f);
+            found = true;
+        }
+    }
+    assert(found);
+}
+
 static void pr210CuratedTileShapes() {
     // Curated classifications from tmc PR #210 ship as embedded defaults.
     // They must never restore the old per-area two/three-tile wall height.
@@ -528,6 +585,8 @@ int main() {
     movementAndOcclusion();
     offscreenOamVisibility();
     pr210CuratedTileShapes();
+    nativeJumpEdgesAndScenery();
+    indoorNativeUnderlay();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
 }
