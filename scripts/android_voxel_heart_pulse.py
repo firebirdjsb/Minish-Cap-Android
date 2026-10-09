@@ -16,6 +16,16 @@ root=Path(__file__).resolve().parents[1]
 vox=root/"upstream/tmc/port/port_voxel.cpp"
 frag=root/"upstream/tmc/port/shaders/voxel.frag"
 
+# Explicit header import: gHUD and HUD_HIDE_HEARTS live in include/ui.h.
+def include_ui():
+    src = vox.read_text(encoding="utf-8")
+    old = '#include "room.h"'
+    if src.count(old) != 1:
+        raise SystemExit("Heart pulse expected one room.h include")
+    vox.write_text(src.replace(old, old + '\n#include "ui.h"', 1), encoding="utf-8")
+
+include_ui()
+
 def patch(path, old, new):
     src=path.read_text(encoding="utf-8")
     n=src.count(old)
