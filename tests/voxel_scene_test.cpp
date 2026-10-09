@@ -98,13 +98,16 @@ static void indoorDoorsAndScraps() {
     // Side opening with native wall support and top frame art.
     block(0, 1);
     block(0, 3);
+    block(1, 1);
+    block(1, 3);
     tile(gMapDataTopSpecial, 0, 2, 2);
+    tile(gMapDataTopSpecial, 1, 2, 2);
     // An isolated 4-pixel overlay must not become a raised glyph.
     gVram[0x4000 + 96] = 0x22;
     gVram[0x4000 + 97] = 0x22;
     gMapDataTopSpecial[5 * 256 + 5 * 2] = 3;
     BuildMap();
-    bool sideDoor = false;
+    int westDoorBands[2] = {};
     for (int i = 0; i < sMapVertCount; i += 6) {
         const auto& a = sMapVerts[i];
         const auto& b = sMapVerts[i + 2];
@@ -113,33 +116,49 @@ static void indoorDoorsAndScraps() {
             continue;
         const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
         assert(!(tx == 5 && ty == 5));
-        if (tx == 0 && ty == 2) {
+        if (tx < 2 && ty == 2) {
             assert(a.pos[0] == b.pos[0] && a.pos[0] == c.pos[0]);
             assert(a.pos[1] != c.pos[1]);
-            sideDoor = true;
+            float low = sMapVerts[i].pos[1], high = low;
+            for (int j = 1; j < 6; ++j) {
+                low = std::min(low, sMapVerts[i + j].pos[1]);
+                high = std::max(high, sMapVerts[i + j].pos[1]);
+            }
+            assert(low == tx * 16.0f && high == low + 16.0f);
+            ++westDoorBands[tx];
         }
     }
-    assert(sideDoor);
+    assert(westDoorBands[0] == 1 && westDoorBands[1] == 1);
     for (int i = 0; i < sFrontCount; ++i)
         assert(sFrontFaces[i].tile != 2 * 64); // doorway never blocks movement
 
     resetScene(false);
+    block(6, 1);
+    block(6, 3);
     block(7, 1);
     block(7, 3);
+    tile(gMapDataTopSpecial, 6, 2, 2);
     tile(gMapDataTopSpecial, 7, 2, 2);
     BuildMap();
-    bool eastDoor = false;
+    int eastDoorBands[2] = {};
     for (int i = 0; i < sMapVertCount; i += 6) {
         const auto& a = sMapVerts[i];
         const auto& b = sMapVerts[i + 2];
         const auto& c = sMapVerts[i + 1];
-        if (a.p[1] == 128 && ((a.p[2] >> 16) & 63) == 7 && ((a.p[2] >> 22) & 63) == 2) {
+        const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
+        if (a.p[1] == 128 && tx >= 6 && ty == 2) {
             assert(a.pos[0] == 96 && a.pos[0] == b.pos[0] && a.pos[0] == c.pos[0]);
             assert(a.pos[1] != c.pos[1]);
-            eastDoor = true;
+            float low = sMapVerts[i].pos[1], high = low;
+            for (int j = 1; j < 6; ++j) {
+                low = std::min(low, sMapVerts[i + j].pos[1]);
+                high = std::max(high, sMapVerts[i + j].pos[1]);
+            }
+            assert(low == (7 - tx) * 16.0f && high == low + 16.0f);
+            ++eastDoorBands[tx - 6];
         }
     }
-    assert(eastDoor);
+    assert(eastDoorBands[0] == 1 && eastDoorBands[1] == 1);
 }
 
 static void ledgeAndCapacity() {

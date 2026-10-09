@@ -152,7 +152,12 @@ region(vox, "    /* Box side on plane x = xs", "    /* Vertical lip of a sunk ti
     auto sideDoor = [&](int x, int y, bool east) {
         const float xs = (east ? W - 2 : 2) * 16.0f;
         const float z0 = y * 16.0f, z1 = z0 + 16.0f;
-        const float c[4][3] = {{xs, 16, z0}, {xs, 16, z1}, {xs, 0, z0}, {xs, 0, z1}};
+        // The two edge columns are consecutive height bands after turning
+        // the native doorway art onto this wall plane. Their order follows
+        // the UV direction below, keeping the shared tile seam continuous.
+        const float h0 = (east ? W - 1 - x : x) * 16.0f;
+        const float c[4][3] = {{xs, h0 + 16, z0}, {xs, h0 + 16, z1},
+                               {xs, h0, z0}, {xs, h0, z1}};
         const float u0 = x * 16.0f, u1 = u0 + 16.0f;
         const float uv[4][2] = {{east ? u0 : u1, z0}, {east ? u0 : u1, z1},
                               {east ? u1 : u0, z0}, {east ? u1 : u0, z1}};

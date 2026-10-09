@@ -23,7 +23,8 @@ dropping a fix. The disabled full smoke-test transform stays disabled.
   palette effects and VRAM tile animations remain live.
 - Small unsupported overlay fragments are suppressed. Interior floor details
   stay at floor height. Top-layer side-door opening and jamb art is rendered on
-  the left/right boundary plane instead of floating horizontal cards.
+  the left/right boundary plane instead of floating horizontal cards. The two
+  edge art columns occupy separate height bands so their textures do not overlap.
 
 ## Player interaction
 
