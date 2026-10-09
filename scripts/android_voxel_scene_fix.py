@@ -346,6 +346,16 @@ replace(frag, "        uint entry = texelFetch(uMaps", "        ivec2 owner = iv
 replace(frag, "idx = bgTexel(entry, vParams.z,", "idx = bgTexel(entry, vParams.z & 65535u,")
 vert = port / "shaders/voxel.vert"
 region(vert, "        if ((aParams.w & 0x40000000u) != 0u) {", "        vec4 anchor =", "        // CPU chooses depth height only for contact with a real front face.\n")
+replace(vert,
+        "        float anchorNdcDepth = anchor.z / anchor.w;\n        clip.z = anchorNdcDepth * clip.w;",
+        """        if ((aParams.w & 0x40000000u) != 0u) {
+            // Link stays visible in front of room geometry at every camera angle.
+            // Keep projected X/Y and leave depth writes disabled for sprites.
+            clip.z = 0.0;
+        } else {
+            float anchorNdcDepth = anchor.z / anchor.w;
+            clip.z = anchorNdcDepth * clip.w;
+        }""")
 
 for path, src in sources.items():
     path.write_text(src, encoding="utf-8")

@@ -202,6 +202,52 @@ static void longIndoorSideWall() {
     assert(rowTwoSide[0] && rowTwoSide[1]); // long walls sample their current row
 }
 
+static void twoRowDoorframes() {
+    resetScene(false, 8, 10);
+    for (int x = 2; x <= 4; ++x)
+        for (int y = 0; y <= 1; ++y)
+            block(x, y);
+    gMapBottom.mapData[3] = 0x3da;
+    gMapBottom.mapData[64 + 3] = 0x91;
+    BuildMap();
+    int north[3][2] = {};
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& a = sMapVerts[i];
+        const auto& b = sMapVerts[i + 1];
+        const auto& c = sMapVerts[i + 2];
+        const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
+        if (a.p[0] == 0 && a.p[1] == 0 && tx >= 2 && tx <= 4 && ty <= 1 &&
+            a.pos[2] == 32 && b.pos[2] == 32 && c.pos[2] == 32) {
+            assert(a.pos[1] == (2 - ty) * 16.0f && c.pos[1] == (1 - ty) * 16.0f);
+            ++north[tx - 2][ty];
+        }
+    }
+    for (const auto& col : north)
+        for (int count : col) assert(count == 1);
+
+    resetScene(false, 8, 10);
+    for (int x : {2, 4})
+        for (int y : {8, 9}) block(x, y);
+    gMapBottom.collisionData[8 * 64 + 3] = 0x27;
+    gMapBottom.collisionData[9 * 64 + 3] = 0x27;
+    BuildMap();
+    int south[3][2] = {};
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& a = sMapVerts[i];
+        const auto& b = sMapVerts[i + 1];
+        const auto& c = sMapVerts[i + 2];
+        const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
+        if (a.p[0] == 0 && a.p[1] == 0 && tx >= 2 && tx <= 4 && ty >= 8 && ty <= 9 &&
+            a.pos[2] == 160 && b.pos[2] == 160 && c.pos[2] == 160) {
+            assert(a.pos[1] == (10 - ty) * 16.0f && c.pos[1] == (9 - ty) * 16.0f);
+            ++south[tx - 2][ty - 8];
+        }
+    }
+    assert(south[0][0] == 1 && south[0][1] == 1);
+    assert(south[1][0] == 1 && south[1][1] == 0); // centre passage stays open
+    assert(south[2][0] == 1 && south[2][1] == 1);
+}
+
 static void ledgeAndCapacity() {
     resetScene(true);
     block(2, 2);
@@ -331,6 +377,7 @@ int main() {
     outdoorRuns();
     indoorDoorsAndScraps();
     longIndoorSideWall();
+    twoRowDoorframes();
     ledgeAndCapacity();
     transitionsAndBindings();
     movementAndOcclusion();

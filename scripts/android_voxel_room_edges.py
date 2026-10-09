@@ -74,6 +74,71 @@ replace(
     "sideDoor(x, y, x >= W - 2);",
     "sideDoor(x, y, x >= W - 2, true);",
 )
+replace(
+    "    /* Visible art pixel (RGB555, -1 transparent). */",
+    """    // Native two-row doorway art belongs on one vertical wall plane. The
+    // north arch has a distinct centre tile type in both rows; the south
+    // entrance has native 0x27 walk-through collision between solid jambs.
+    // Classify by map topology so other rooms using these layouts follow suit.
+    bool northDoorColumns[64] = {}, southDoorColumns[64] = {};
+    bool southDoorCenters[64] = {};
+    if (!outdoors && H >= 4) {
+        for (int x = 3; x < W - 3; ++x) {
+            bool arch = true;
+            for (int y = 0; y < 2; ++y) {
+                const int t = y * 64 + x;
+                arch &= solid[t - 1] && solid[t] && solid[t + 1] &&
+                        gMapBottom.mapData[t] != gMapBottom.mapData[t - 1] &&
+                        gMapBottom.mapData[t] != gMapBottom.mapData[t + 1];
+            }
+            if (arch)
+                northDoorColumns[x - 1] = northDoorColumns[x] = northDoorColumns[x + 1] = true;
+        }
+        for (int x = 2; x < W - 2; ++x) {
+            bool entrance = true;
+            for (int y = H - 2; y < H; ++y) {
+                const int t = y * 64 + x;
+                entrance &= gMapBottom.collisionData[t] == 0x27 &&
+                            solid[t - 1] && solid[t + 1];
+            }
+            if (entrance) {
+                southDoorColumns[x - 1] = southDoorColumns[x + 1] = true;
+                southDoorCenters[x] = true;
+            }
+        }
+    }
+
+    /* Visible art pixel (RGB555, -1 transparent). */""",
+)
+replace(
+    "        Uint32 rowMask[64] = {};",
+    """        // The ordinary run would put one row on the facade and repeat the
+        // other as a horizontal cap. Stand both doorway rows on the facade.
+        const bool northFrame = northDoorColumns[x] && yt == 0 && yb == 1;
+        const bool southFrame = southDoorColumns[x] && yt == H - 2 && yb == H - 1;
+        if (northFrame || southFrame) {
+            for (int y = yt; y <= yb; ++y)
+                wallV(x, y, zFace, (yb - y) * 16.0f, 16.0f, 0);
+            const int tile = yb * 64 + x;
+            if (solid[tile] && gMapBottom.collisionData[tile] == 0x0f &&
+                sFrontCount < 64 * 64)
+                sFrontFaces[sFrontCount++] = {x * 16.0f, (x + 1) * 16.0f,
+                                             zFace, 32.0f, tile,
+                                             gMapBottom.mapData[tile]};
+            continue;
+        }
+
+        Uint32 rowMask[64] = {};""",
+)
+replace(
+    "    for (int y = 2; y < H - 2; ++y)\n        for (int x = 0; x < W; ++x)",
+    """    // Keep the passage itself open: only its upper arch row faces outward.
+    for (int x = 0; x < W; ++x)
+        if (southDoorCenters[x])
+            wallV(x, H - 2, H * 16.0f, 16.0f, 16.0f, 0);
+    for (int y = 2; y < H - 2; ++y)
+        for (int x = 0; x < W; ++x)""",
+)
 
 path.write_text(source, encoding="utf-8")
-print("Applied indoor side-wall row ownership and passable side-door art")
+print("Applied shared indoor wall-row ownership and doorway planes")
