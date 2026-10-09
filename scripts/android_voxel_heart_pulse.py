@@ -33,6 +33,15 @@ def patch(path, old, new):
         raise SystemExit(f"Heart pulse: expected 1 anchor, saw {n}, in {path.name}: {old[:110]!r}")
     path.write_text(src.replace(old,new,1),encoding="utf-8")
 
+# Mark genuine HUD OAM cards explicitly. World entities at room z=0 must
+# not be mistaken for the heart overlay in the upper-left viewport.
+patch(vox,
+    '''        const float c[4][3] = { { x0, y0, 0 }, { x1, y0, 0 }, { x0, y1, 0 }, { x1, y1, 0 } };
+        QuadUv(sVerts, kMaxVerts, n, c, o.uv, 1, o.tile, o.pal, o.rowParam);''',
+    '''        const float c[4][3] = { { x0, y0, 0 }, { x1, y0, 0 }, { x0, y1, 0 }, { x1, y1, 0 } };
+        QuadUv(sVerts, kMaxVerts, n, c, o.uv, 1, o.tile, o.pal,
+               o.rowParam | 0x20000000u); /* screen-space HUD OAM */''')
+
 patch(vox,
     '''    float actors[kFadeMaxActors][4];
 };
@@ -104,7 +113,7 @@ patch(frag,
     '''    vec3 rgb = texelFetch(uPal, ivec2(int(idx), 0), 0).rgb;
     // Heart UI OBJ cards are flat screen quads at z=0; other sprites stand
     // in 3D world space and must NEVER receive HUD pulse modulation.
-    if (vParams.x == 1u && abs(vWorld.z) < 0.001)
+    if (vParams.x == 1u && (vParams.w & 0x20000000u) != 0u)
         rgb = pulseCurrentHeart(rgb);
     oColor = vec4(rgb, 1.0);''')
 print("Restored slow current-heart HUD pulse, game-tick paced; preserves 2D and other 3D effects")
