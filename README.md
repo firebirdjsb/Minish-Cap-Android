@@ -25,7 +25,7 @@ The game/decomp/native-port code comes from:
 
 - https://github.com/999sian/tmc
 
-It is tracked as the `upstream/tmc` git submodule. Android-specific changes live in this repository as patches and wrapper tooling so upstream Project Picori updates can be merged without maintaining a permanently diverged copy.
+It is tracked as the `upstream/tmc` git submodule. Android-specific files live under `overrides/` and are applied by `scripts/prepare_android.sh`, so upstream Project Picori updates can be adopted without maintaining a permanently diverged source copy.
 
 ## Legal
 
@@ -33,4 +33,4 @@ Project Picori is GPL-3.0 and is based on the zeldaret Minish Cap decompilation.
 
 ## Status
 
-Initial Android/S24 Ultra integration branch is being established. The first target is a sideloadable `arm64-v8a` APK with a true single-screen landscape presentation and overlaid controls.
+The ARM64 Android build is now passing in CI. The current test APK is a true single-screen landscape build with overlaid touch controls, immersive fullscreen, native Android ROM selection, and Android save import/export.

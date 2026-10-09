@@ -1,0 +1,195 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - android-s24-single-screen
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout port
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Checkout required upstream source
+        shell: bash
+        run: |
+          # Project Picori currently lists two unavailable/private optional
+          # submodules. The Android game build only requires VirtuaAPU, so do
+          # not recurse through every upstream submodule here.
+          git submodule sync -- upstream/tmc
+          git submodule update --init --depth 1 -- upstream/tmc
+          git -C upstream/tmc submodule sync -- libs/VirtuaAPU
+          git -C upstream/tmc submodule update --init --depth 1 -- libs/VirtuaAPU
+          test -d upstream/tmc/libs/VirtuaAPU/src
+
+      - name: Install voxel shader compiler
+        shell: bash
+        run: |
+          # Hosted runners generally have usable apt lists already. Avoid
+          # hanging for minutes in a mirror refresh before source compilation.
+          if ! sudo timeout -k 5 120s apt-get install -y -o Acquire::Retries=2 glslang-tools ripgrep g++; then
+            echo "Cached apt lists incomplete; refreshing with a bounded timeout"
+            sudo timeout -k 5 90s apt-get update -qq
+            sudo timeout -k 5 120s apt-get install -y -o Acquire::Retries=2 glslang-tools ripgrep g++
+          fi
+
+      - name: Prepare patched upstream
+        shell: bash
+        run: |
+          bash scripts/prepare_android.sh
+          test -d upstream/tmc/libs/VirtuaAPU/src
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: v3.0.8
+          actions-cache-folder: .xmake-cache
+          actions-cache-key: minish-cap-android-arm64
+          package-cache: true
+          package-cache-key: minish-cap-android-arm64
+          project-path: upstream/tmc
+
+      - name: Install Android NDK r26d
+        shell: bash
+        run: |
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264"
+          echo "TMC_NDK=$ANDROID_SDK_ROOT/ndk/26.3.11579264" >> "$GITHUB_ENV"
+
+      - name: Build native ARM64 library
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          xmake f -y -p android -a arm64-v8a --ndk="$TMC_NDK" \
+            --game_version=USA --widescreen_width=576
+          xmake build -y tmc_pc
+          test -f build/android/arm64-v8a/libmain.so
+
+      - name: Check synthetic voxel scenes at native and widescreen widths
+        shell: bash
+        run: |
+          python3 scripts/check_voxel_scene.py
+
+      - name: Split debug symbols and strip ARM64 library
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          LIB=build/android/arm64-v8a/libmain.so
+          TOOLBIN="$TMC_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          mkdir -p build/android-symbols
+          "$TOOLBIN/llvm-objcopy" --only-keep-debug "$LIB" build/android-symbols/libmain.so.debug
+          "$TOOLBIN/llvm-strip" --strip-unneeded "$LIB"
+          "$TOOLBIN/llvm-objcopy" --add-gnu-debuglink=build/android-symbols/libmain.so.debug "$LIB"
+          test -s build/android-symbols/libmain.so.debug
+          "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.gnu_debuglink'
+          ! "$TOOLBIN/llvm-readelf" -S "$LIB" | grep -Fq '.debug_info'
+
+      - name: Restore Android test signing key
+        id: signing-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/minish-cap-s24-test.keystore
+          key: minish-cap-android-s24-signing-v2
+
+      - name: Prepare stable Android test signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          KS="$HOME/.android/minish-cap-s24-test.keystore"
+
+          if [[ ! -s "$KS" ]]; then
+            keytool -genkeypair -noprompt               -keystore "$KS"               -storepass android               -keypass android               -alias minishcaptest               -keyalg RSA               -keysize 2048               -validity 10950               -dname "CN=Minish Cap Android Test,O=firebirdjsb,C=CA"
+          fi
+
+          keytool -list -v -keystore "$KS" -storepass android -alias minishcaptest
+
+          {
+            echo "TMC_KEYSTORE_FILE=$KS"
+            echo "TMC_KEYSTORE_PASSWORD=android"
+            echo "TMC_KEY_ALIAS=minishcaptest"
+            echo "TMC_KEY_PASSWORD=android"
+          } >> "$GITHUB_ENV"
+
+      - name: Save Android test signing key
+        if: steps.signing-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/minish-cap-s24-test.keystore
+          key: minish-cap-android-s24-signing-v2
+
+      - name: Build release APK
+        shell: bash
+        working-directory: upstream/tmc/android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Verify APK
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK"
+
+          APK_CERT=$("$BT/apksigner" verify --print-certs "$APK"             | sed -n 's/.*certificate SHA-256 digest: //p'             | head -n 1             | tr -d ':'             | tr '[:lower:]' '[:upper:]')
+          KS_CERT=$(keytool -list -v             -keystore "$TMC_KEYSTORE_FILE"             -storepass "$TMC_KEYSTORE_PASSWORD"             -alias "$TMC_KEY_ALIAS"             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          EXPECTED_CERT="59511A4AA8348F6BE752FC87E807839DC5C5AE95D9772209A5533CF01C32CF38"
+          if [[ -z "$APK_CERT" || -z "$KS_CERT" || "$APK_CERT" != "$KS_CERT" ]]; then
+            echo "::error::APK certificate does not match the persisted CI signing key"
+            echo "APK=$APK_CERT"
+            echo "KEY=$KS_CERT"
+            exit 1
+          fi
+          if [[ "$APK_CERT" != "$EXPECTED_CERT" || "$KS_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::Android signing identity changed; refusing to publish an update-incompatible APK"
+            echo "EXPECTED=$EXPECTED_CERT"
+            echo "APK=$APK_CERT"
+            echo "KEY=$KS_CERT"
+            exit 1
+          fi
+
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmain.so'
+          if unzip -l "$APK" | grep -q 'lib/x86_64/libmain.so'; then
+            echo "::error::x86_64 unexpectedly packaged in phone-only APK"
+            exit 1
+          fi
+
+          cp "$APK" Minish-Cap-Android-S24-arm64.apk
+
+      - name: Pack native symbols
+        shell: bash
+        working-directory: upstream/tmc
+        run: |
+          tar -czf Minish-Cap-Android-S24-arm64-symbols.tar.gz -C build/android-symbols libmain.so.debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minish-Cap-Android-S24-arm64
+          path: upstream/tmc/Minish-Cap-Android-S24-arm64.apk
+          if-no-files-found: error
+
+      - name: Upload native symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minish-Cap-Android-S24-arm64-symbols
+          path: upstream/tmc/Minish-Cap-Android-S24-arm64-symbols.tar.gz
+          if-no-files-found: error

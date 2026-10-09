@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Final 3D quality pass: deeper terrain, one-tile walls, doorway validation.
+
+Runs on the *prepared upstream* after scene_fix, room_edges and town_fidelity.
+Keeps the 2D renderer and native collision unchanged. Every code anchor is
+asserted so a partial transform never silently ships to Android.
+"""
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+voxel = root / "upstream/tmc/port/port_voxel.cpp"
+view = voxel.read_text(encoding="utf-8")
+
+
+def replace_one(old: str, new: str):
+    global view
+    count = view.count(old)
+    if count != 1:
+        raise SystemExit(f"3D depth pass: {count} source anchors: {old[:110]!r}")
+    view = view.replace(old, new, 1)
+
+
+# Mobile memory: 64 tiles around each room (was 40); 64x64 room plus skirt
+# fits within the bounded map-vertex staging arrays. The GPU frustum culls
+# invisible patches. Raised geometry stays room-local.
+replace_one(
+    "constexpr int kMaxMapVerts = (64 * 64 * 12 + 144 * 144 * 2) * 6;",
+    "constexpr int kMaxMapVerts = (64 * 64 * 12 + 192 * 192 * 2) * 6;",
+)
+replace_one("    constexpr int kGroundMargin = 40;", "    constexpr int kGroundMargin = 64;")
+
+# A wide/connected wall is not necessarily a taller wall. Automatic
+# two- and three-tile promotion made outdoor cliffs and roofs bulky and
+# distorted the source art. Preserve the renderer's single-tile default for
+# every ordinary inferred solid run, irrespective of neighbouring runs.
+# Genuine multi-row doorway artwork remains explicitly handled by the
+# topology-aware room-edge pass; native collision layers still control actors.
+replace_one(
+    "    const int wallTiles = sBuildShapes ? sBuildShapes->wall : kDefaultWallTiles;",
+    "    const int wallTiles = kDefaultWallTiles; /* single tile for inferred walls */",
+)
+
+# False-positive north "arches" on patterned walls are a known source of
+# flipped symbols. Real top exits need a native passage trigger immediately
+# beyond the arch. Do not reinterpret ordinary art-only differences.
+replace_one(
+    """            if (arch)
+                northDoorColumns[x - 1] = northDoorColumns[x] = northDoorColumns[x + 1] = true;""",
+    """            const u8 passage = gMapBottom.collisionData[2 * 64 + x];
+            if (arch && (passage == 0x27 || passage == 0x23))
+                northDoorColumns[x - 1] = northDoorColumns[x] = northDoorColumns[x + 1] = true;""",
+)
+replace_one(
+    """        // A side-boundary opening, or its immediately adjacent jamb. Solid
+        // frame tiles also need this treatment, not only walkable overhang.
+        return !solid[y * 64 + x] ||
+               !solid[(y - 1) * 64 + x] || !solid[(y + 1) * 64 + x];""",
+    """        // Only genuine 0x23 side openings and their adjoining solid
+        // jambs belong on a rotated doorway plane. Ordinary decorative
+        // upper-wall art previously appeared as cryptic floating symbols.
+        const int t = y * 64 + x;
+        return sideOpening(x, y) ||
+               (solid[t] && gMapBottom.collisionData[t] == 0x0f &&
+                (sideOpening(x, y - 1) || sideOpening(x, y + 1)));""",
+)
+
+# A valid walkable perimeter floor may also have an opaque top BG used for
+# pavement, flags, flowerbeds or Hyrule Castle stone detail. Sample BOTH
+# layers of its actual local material in the scenery extension.
+replace_one(
+    """            return !solid[t] && !Geom(sx, sy) && !Cover(sx, sy) &&
+                   SinkDepth(sx, sy) == 0.0f;""",
+    """            return !solid[t] && !Geom(sx, sy) &&
+                   SinkDepth(sx, sy) == 0.0f;""",
+)
+
+replace_one(
+    """                const GroundArt ground = dx > dy
+                    ? (x < 0 ? leftSource[ay] : rightSource[ay])
+                    : (y < 0 ? topSource[ax] : bottomSource[ax]);
+                flatL(false, x, ground.x, ground.y, 0.0f,
+                      y * 16.0f, y * 16.0f + 16.0f, 0);""",
+    """                // Reflect a narrow band of native floor art past each
+                // border. This preserves local path/grass/stone patterns
+                // instead of extending a single plain tile for 64 rows.
+                // Never mirror a roof, cliff, wall or decorative overhang.
+                auto reflect = [](int c, int size) {
+                    constexpr int band = 8;
+                    if (c < 0)
+                        return std::min(size - 1, (-c - 1) % band);
+                    if (c >= size)
+                        return std::max(0, size - 1 - ((c - size) % band));
+                    return c;
+                };
+                const int rx = reflect(x, W), ry = reflect(y, H);
+                const GroundArt nearest = dx > dy
+                    ? (x < 0 ? leftSource[ay] : rightSource[ay])
+                    : (y < 0 ? topSource[ax] : bottomSource[ax]);
+                const GroundArt ground = skirtFloor(rx, ry) ? GroundArt{rx, ry} : nearest;
+                flatL(false, x, ground.x, ground.y, 0.0f,
+                      y * 16.0f, y * 16.0f + 16.0f, 0);
+                if (Cover(ground.x, ground.y))
+                    flatL(true, x, ground.x, ground.y, kSurfaceEpsilon,
+                          y * 16.0f, y * 16.0f + 16.0f, 0);""",
+)
+voxel.write_text(view, encoding="utf-8")
+
+# Native collision layers and explicit doorway geometry remain internal.
+# Keep the camera pitch control, not user-adjustable wall height or tile shape.
+display = root / "upstream/tmc/port/port_imgui_display_tab.inc"
+ui = display.read_text(encoding="utf-8")
+start = "        /* Phase-3 shape editor: fix what the height heuristic misreads, per"
+end = '        StepperRow("Internal scale", "iscale",'
+if ui.count(start) != 1 or ui.count(end) != 1:
+    raise SystemExit("3D display controls have changed unexpectedly")
+a = ui.index(start)
+b = ui.index(end, a)
+ui = ui[:a] + """        // Geometry height and classification are managed by the 3D view.
+        // Users can still control the camera angle, but not scene levels.
+        const int voxArea = Port_Config_GetVoxelView() ? Port_Voxel_CurrentArea() : -1;
+        if (voxArea >= 0)
+            StepperRow("3D camera angle", "voxpitch",
+                       [](char* b, size_t n) -> const char* {
+                           std::snprintf(b, n, "%d deg", Port_Config_GetVoxelPitch());
+                           return b;
+                       },
+                       Port_Config_CycleVoxelPitch);
+
+""" + ui[b:]
+display.write_text(ui, encoding="utf-8")
+print("Applied 64-tile view extension, native terrain BG materials, one-tile inferred walls and verified doorframe geometry")
