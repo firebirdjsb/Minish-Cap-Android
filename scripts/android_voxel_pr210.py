@@ -211,8 +211,14 @@ patch(voxel,
     '''    fs.num_samplers = 5;
     fs.num_uniform_buffers = 1;''')
 patch(voxel,
-    '''PortVoxelTileAhead Port_Voxel_TileAhead(void) {''',
-    '''/* Gather physical actors; cap work at 16 even in busy rooms.
+    '''    sShotRequested = true;
+}
+
+PortVoxelTileAhead Port_Voxel_TileAhead(void) {''',
+    '''    sShotRequested = true;
+}
+
+/* Gather physical actors; cap work at 16 even in busy rooms.
  * The wall fade only affects *rendered* geometry, not their native AI.
  * Link first so the player always gets an unobstructed view. */
 static void GatherFadeActors(PortVoxelFade& fade) {
