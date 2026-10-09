@@ -565,6 +565,44 @@ static void pr210CuratedTileShapes() {
     assert(kDefaultWallTiles == 1);
 }
 
+static void festivalCutoutsAndBridgeForeground() {
+    resetScene(true, 12, 12);
+    // A bright, partially transparent top-BG flower/flag is ART, not a
+    // solid floor strip. Place its original pixelated sprite vertically.
+    gBgPltt[3] = 31 | (2 << 5); // bright red GBA colour
+    std::memset(gVram + 0x4000 + 3 * 32, 0x33, 12);
+    tile(gMapDataTopSpecial, 6, 6, 3);
+    BuildMap();
+    bool standing = false, floor = false;
+    for (int i=0;i<sMapVertCount;i+=6) {
+        const auto& v=sMapVerts[i];
+        if (v.pos[0]==96.0f && v.pos[2]==112.35f &&
+            v.pos[1]==16.0f && v.p[1]==128)
+            standing=true;
+        if (v.pos[0]==96.0f && v.pos[2]==96.0f &&
+            v.pos[1]==0.0f && v.p[1]==0)
+            floor=true;
+    }
+    assert(standing && floor); // no 3D collision changes
+
+    resetScene(true,12,12);
+    for (int x=2;x<=9;++x)
+        tile(gMapDataTopSpecial,x,5,2);
+    BuildMap();
+    assert(sBridgeFirstVert < sMapVertCount);
+    for(int i=0;i<sBridgeFirstVert;i+=6)
+        assert((sMapVerts[i].p[3] & 0x40000000u)==0u);
+    for(int i=sBridgeFirstVert;i<sMapVertCount;i+=6)
+        assert((sMapVerts[i].p[3] & 0x40000000u)!=0u);
+
+    resetScene(true,12,12);
+    for(int y=3;y<=7;++y)
+        for(int x=2;x<=9;++x)
+            tile(gMapDataTopSpecial,x,y,2);
+    BuildMap();
+    assert(sBridgeFirstVert == sMapVertCount);
+}
+
 static void fullNativeNorthWall() {
     // Ordinary two-row room back walls must preserve BOTH 16px facade art
     // rows on a SINGLE north-facing plane. Previously the upper row became
@@ -676,6 +714,7 @@ int main() {
     indoorNativeUnderlay();
     fullNativeNorthWall();
     nativeBridgeDepthAndIndoorLayering();
+    festivalCutoutsAndBridgeForeground();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
 }
