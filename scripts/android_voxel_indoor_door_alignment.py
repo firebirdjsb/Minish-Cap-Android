@@ -23,7 +23,7 @@ def patch(a,b):
 # Keep the geometry at x but give flanking *solid* jambs nearby plain wall UVs.
 # The centre arch itself uses native art. Only rows 0/1 of real north doors.
 a=s.index("    auto wallV = ")
-b=s.index("    /* Box side",a)
+b=s.index("    auto sideV =",a)
 part=s[a:b]
 old="""        const float x0 = x * 16.0f, x1 = x0 + 16;"""
 assert part.count(old)==1
