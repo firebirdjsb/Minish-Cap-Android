@@ -85,6 +85,16 @@ checked(
         if (ov == PORT_VOXEL_SHAPE_BLOCK && !nativeSmallScenery)
             return false;""")
 
+# Native bushes/grass/sticks do not become stone columns merely because
+# they happen to touch a hedge, house or other collision wall.
+checked(
+    """        if (ov != PORT_VOXEL_SHAPE_PROP &&
+            (Geom(x, y - 1) || Geom(x, y + 1) || Geom(x - 1, y) || Geom(x + 1, y)))
+            return false;""",
+    """        if (ov != PORT_VOXEL_SHAPE_PROP && !nativeSmallScenery &&
+            (Geom(x, y - 1) || Geom(x, y + 1) || Geom(x - 1, y) || Geom(x + 1, y)))
+            return false;""")
+
 # For curated props without an outline mask, preserve the native 2D art on
 # the ground instead of displaying a solid cube. A successful mask stands as
 # a sprite card; no gameplay collision is added or removed.
@@ -124,7 +134,9 @@ checked(
                     connected |= Geom(x + dx, y);
                 for (int dy : {-1, 1})
                     connected |= Geom(x, y + dy);
-                if (!connected) {
+                const int smallType = BottomTileType(y * 64 + x);
+                if (!connected || smallType == 28 || smallType == 29 ||
+                    smallType == 30 || smallType == 374) {
                     // BuildPropMask failed; use faithful flat source artwork
                     // rather than inventing a vertical closed cube.
                     geom[y * 64 + x] = 0;
