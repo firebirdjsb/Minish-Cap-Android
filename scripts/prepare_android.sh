@@ -53,6 +53,7 @@ python3 "$ROOT/scripts/android_voxel_scene_fidelity_v2.py"
 python3 "$ROOT/scripts/android_voxel_indoor_door_alignment.py"
 python3 "$ROOT/scripts/android_voxel_native_festival_props.py"
 python3 "$ROOT/scripts/android_voxel_bridge_foreground.py"
+python3 "$ROOT/scripts/android_voxel_room_load_stabilization.py"
 command -v glslangValidator >/dev/null 2>&1 || { echo "glslangValidator is required for voxel shader rebuild"; exit 1; }
 bash "$UPSTREAM/port/shaders/build.sh"
 
