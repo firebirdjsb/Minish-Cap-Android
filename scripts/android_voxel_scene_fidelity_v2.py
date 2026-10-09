@@ -43,7 +43,11 @@ change(
 change(
     """        if (northFrame || southFrame) {
             for (int y = yt; y <= yb; ++y)""",
-    """        const bool northPerimeter = !outdoors && yt == 0 && yb == 1 &&
+    """        const bool nearNorthDoor = northDoorColumns[x] ||
+            (x > 0 && northDoorColumns[x-1]) ||
+            (x+1 < W && northDoorColumns[x+1]);
+        const bool northPerimeter = !outdoors && yt == 0 && yb == 1 &&
+            !nearNorthDoor &&
             gMapBottom.collisionData[x] == 0x0f &&
             gMapBottom.collisionData[64 + x] == 0x0f;
         if (northFrame || southFrame || northPerimeter) {
