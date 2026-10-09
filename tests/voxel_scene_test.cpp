@@ -102,6 +102,8 @@ static void indoorDoorsAndScraps() {
     block(1, 3);
     tile(gMapDataTopSpecial, 0, 2, 2);
     tile(gMapDataTopSpecial, 1, 2, 2);
+    gMapBottom.collisionData[2 * 64 + 0] = 0x23;
+    gMapBottom.collisionData[2 * 64 + 1] = 0x23;
     // An isolated 4-pixel overlay must not become a raised glyph.
     gVram[0x4000 + 96] = 0x22;
     gVram[0x4000 + 97] = 0x22;
@@ -139,6 +141,8 @@ static void indoorDoorsAndScraps() {
     block(7, 3);
     tile(gMapDataTopSpecial, 6, 2, 2);
     tile(gMapDataTopSpecial, 7, 2, 2);
+    gMapBottom.collisionData[2 * 64 + 6] = 0x23;
+    gMapBottom.collisionData[2 * 64 + 7] = 0x23;
     BuildMap();
     int eastDoorBands[2] = {};
     for (int i = 0; i < sMapVertCount; i += 6) {
@@ -209,6 +213,7 @@ static void twoRowDoorframes() {
             block(x, y);
     gMapBottom.mapData[3] = 0x3da;
     gMapBottom.mapData[64 + 3] = 0x91;
+    gMapBottom.collisionData[2 * 64 + 3] = 0x27;
     BuildMap();
     int north[3][2] = {};
     for (int i = 0; i < sMapVertCount; i += 6) {
@@ -284,18 +289,26 @@ static void townGroundFidelity() {
             gMapBottom.mapData[y * 64 + x] = 2;
             tile(gMapDataBottomSpecial, x, y, 2);
         }
+    // Castle border is not a single grass texture: pavement also uses the
+    // native top BG layer at real walkable ground height.
+    tile(gMapDataTopSpecial, 0, 3, 2);
     // An opaque top BG painted over a walkable plaza square belongs on its
     // native floor; it must never become a floating one-tile-high platform.
     tile(gMapDataTopSpecial, 3, 3, 2);
     tile(gMapDataTopSpecial, 4, 3, 2);
     BuildMap();
-    bool topOnFloor = false, skirtUsesGrass = false;
+    bool topOnFloor = false, skirtUsesGrass = false, skirtCarriesStone = false;
     for (int i = 0; i < sMapVertCount; i += 6) {
         const auto& q = sMapVerts[i];
         const int tx = (q.p[2] >> 16) & 63, ty = (q.p[2] >> 22) & 63;
         if (q.p[0] == 0 && q.p[1] == 128 && tx == 3 && ty == 3) {
             assert(q.pos[1] >= 0 && q.pos[1] < 2.0f);
             topOnFloor = true;
+        }
+        if (q.p[0] == 0 && q.p[1] == 128 &&
+            q.pos[0] < 0 && q.pos[2] >= 48 && q.pos[2] < 64) {
+            assert(q.pos[1] >= 0 && q.pos[1] < 2.0f);
+            skirtCarriesStone = true;
         }
         if (q.p[0] == 0 && q.p[1] == 0 &&
             q.pos[0] < 0 && q.pos[2] >= 32 && q.pos[2] < 96) {
@@ -304,8 +317,47 @@ static void townGroundFidelity() {
             skirtUsesGrass = true;
         }
     }
-    assert(topOnFloor && skirtUsesGrass);
+    assert(topOnFloor && skirtUsesGrass && skirtCarriesStone);
     assert(kDefaultWallTiles == 1);
+}
+
+static void intrinsicGeometryLevels() {
+    resetScene(true, 8, 9);
+    // Connected blocked cliff gets height level two without changing the
+    // user's one-tile default or exposing any height controls.
+    for (int x = 2; x <= 4; ++x)
+        for (int y = 1; y <= 3; ++y)
+            block(x, y);
+    BuildMap();
+    bool twoLevels = false;
+    for (int i = 0; i < sFrontCount; ++i)
+        if (sFrontFaces[i].height == 32.0f)
+            twoLevels = true;
+    assert(twoLevels);
+
+    resetScene(true, 8, 10);
+    for (int x = 2; x <= 4; ++x)
+        for (int y = 1; y <= 5; ++y)
+            block(x, y);
+    BuildMap();
+    bool threeLevels = false;
+    for (int i = 0; i < sFrontCount; ++i)
+        if (sFrontFaces[i].height == 48.0f)
+            threeLevels = true;
+    assert(threeLevels);
+    assert(kDefaultWallTiles == 1);
+
+    resetScene(false, 8, 10);
+    for (int x = 2; x <= 4; ++x)
+        for (int y = 0; y < 2; ++y)
+            block(x, y);
+    gMapBottom.mapData[3] = 0x3da;
+    gMapBottom.mapData[64 + 3] = 0x91;
+    // Similar decorated brick wall, but NO native door passage: must not
+    // rotate its artwork into a 32px floating doorway glyph.
+    BuildMap();
+    for (int i = 0; i < sFrontCount; ++i)
+        assert(sFrontFaces[i].height != 32.0f);
 }
 
 static void transitionsAndBindings() {
@@ -414,6 +466,7 @@ int main() {
     twoRowDoorframes();
     ledgeAndCapacity();
     townGroundFidelity();
+    intrinsicGeometryLevels();
     transitionsAndBindings();
     movementAndOcclusion();
     aspects();
