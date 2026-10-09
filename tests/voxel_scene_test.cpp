@@ -227,8 +227,12 @@ static void twoRowDoorframes() {
             ++north[tx - 2][ty];
         }
     }
-    for (const auto& col : north)
-        for (int count : col) assert(count == 1);
+    // The true passage centre has two 16px frame rows. Adjacent jamb
+    // columns retain the normal one-row wall cap, not glyph-bearing 32px
+    // false doorway faces.
+    assert(north[1][0] == 1 && north[1][1] == 1);
+    assert(north[0][0] == 0 && north[2][0] == 0);
+    assert(north[0][1] == 1 && north[2][1] == 1);
 
     resetScene(false, 8, 10);
     for (int x : {2, 4})
@@ -561,6 +565,57 @@ static void pr210CuratedTileShapes() {
     assert(kDefaultWallTiles == 1);
 }
 
+static void nativeBridgeDepthAndIndoorLayering() {
+    resetScene(true, 12, 12);
+    // A long thin BG2 deck across passable bottom-map ground must be
+    // overhead rather than a duplicated ground/plaza tile.
+    for (int x = 2; x <= 9; ++x)
+        tile(gMapDataTopSpecial, x, 5, 2);
+    BuildMap();
+    bool elevated = false, groundBelow = false;
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& v = sMapVerts[i];
+        if (v.pos[0] >= 2 * 16 && v.pos[0] <= 9 * 16 &&
+            v.pos[2] == 5 * 16 && v.p[1] == 128) {
+            if ((v.p[3] & 0x40000000u) != 0u) {
+                assert(v.pos[1] == 32.0f);
+                elevated = true;
+            } else {
+                assert(v.pos[1] < 2.0f || v.pos[1] > 32.0f);
+            }
+        }
+        if (v.pos[0] == 5 * 16 && v.pos[2] == 5 * 16 &&
+            v.p[1] == 0 && v.pos[1] == 0.0f)
+            groundBelow = true;
+    }
+    assert(elevated && groundBelow);
+
+    resetScene(true, 12, 12);
+    // Wide opaque plaza backgrounds are FLOOR, not overhead decks.
+    for (int y = 3; y <= 7; ++y)
+        for (int x = 2; x <= 9; ++x)
+            tile(gMapDataTopSpecial, x, y, 2);
+    BuildMap();
+    for (int i = 0; i < sMapVertCount; i += 6)
+        if (sMapVerts[i].p[1] == 128)
+            assert((sMapVerts[i].p[3] & 0x40000000u) == 0u);
+
+    resetScene(false, 10, 10);
+    // Interior furniture/trim in the top BG next to collision wall must
+    // remain at native floor X/Z, not be absorbed into a fake wall run.
+    block(4, 5);
+    tile(gMapDataTopSpecial, 5, 5, 2);
+    BuildMap();
+    bool nativeFloorDetail = false;
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& v = sMapVerts[i];
+        if (v.p[1] == 128 && v.pos[0] == 5 * 16 &&
+            v.pos[2] == 5 * 16 && v.pos[1] < 2.0f)
+            nativeFloorDetail = true;
+    }
+    assert(nativeFloorDetail);
+}
+
 static void aspects() {
     for (float aspect : {1.5f, 16.0f/9, 21.0f/9, 32.0f/9, 3120.0f/1440}) {
         for (auto size : {std::pair{3120, 1440}, std::pair{960, 540}, std::pair{800, 600}}) {
@@ -588,6 +643,7 @@ int main() {
     pr210CuratedTileShapes();
     nativeJumpEdgesAndScenery();
     indoorNativeUnderlay();
+    nativeBridgeDepthAndIndoorLayering();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
 }
