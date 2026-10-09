@@ -218,7 +218,7 @@ static void twoRowDoorframes() {
         const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
         if (a.p[0] == 0 && a.p[1] == 0 && tx >= 2 && tx <= 4 && ty <= 1 &&
             a.pos[2] == 32 && b.pos[2] == 32 && c.pos[2] == 32) {
-            assert(a.pos[1] == (2 - ty) * 16.0f && c.pos[1] == (1 - ty) * 16.0f);
+            assert(a.pos[1] == (2 - ty) * 16.0f && b.pos[1] == (1 - ty) * 16.0f);
             ++north[tx - 2][ty];
         }
     }
@@ -239,7 +239,7 @@ static void twoRowDoorframes() {
         const int tx = (a.p[2] >> 16) & 63, ty = (a.p[2] >> 22) & 63;
         if (a.p[0] == 0 && a.p[1] == 0 && tx >= 2 && tx <= 4 && ty >= 8 && ty <= 9 &&
             a.pos[2] == 160 && b.pos[2] == 160 && c.pos[2] == 160) {
-            assert(a.pos[1] == (10 - ty) * 16.0f && c.pos[1] == (9 - ty) * 16.0f);
+            assert(a.pos[1] == (10 - ty) * 16.0f && b.pos[1] == (9 - ty) * 16.0f);
             ++south[tx - 2][ty - 8];
         }
     }

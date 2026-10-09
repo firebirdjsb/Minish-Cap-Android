@@ -66,7 +66,7 @@ replace(
                          * successive map rows. Reusing the run's last row
                          * prints the same window or jamb all along that side. */
                         sideV(x, !outdoors && b >= 2 && b < H - 2 &&
-                                      ((x == 1 && e == 1) || (x == W - 2 && e == 0))
+                                      (x < 2 || x >= W - 2)
                                   ? b : yb - i,
                               e != 0, z0, z1, h0, h1,""",
 )

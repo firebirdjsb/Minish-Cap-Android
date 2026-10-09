@@ -78,7 +78,7 @@ bool FrontFaceCurrent(const voxel::FrontFace& f) {
            gMapBottom.mapData[f.tile] == f.mapTile;
 }
 
-float PlayerContactDepth(float x, float z, float pitch) {
+float EntityContactDepth(float x, float z, float pitch) {
     float height = 0.0f;
     for (int i = 0; i < sFrontCount; ++i)
         if (FrontFaceCurrent(sFrontFaces[i]))
@@ -261,8 +261,11 @@ replace(vox, "        const float x0 = o.x + scrollX, x1 = x0 + o.w;", r'''     
         const float x0 = o.x + objectScrollX, x1 = x0 + o.w;''')
 replace(vox, "        const float entityFootZ = (float)entityFoot + scrollY;\n        const float entityCenterX = (x0 + x1) * 0.5f;", "        const float entityFootZ = entity ? (float)tag.roomZ : entityFoot + objectScrollY;\n        const float entityCenterX = entity ? (float)tag.roomX : (x0 + x1) * 0.5f;")
 replace(vox, "const float y = elev + 0.25f, z0 = sy0 + scrollY, z1 = sy1 + scrollY;", "const float y = elev + kSurfaceEpsilon, z0 = sy0 + objectScrollY, z1 = sy1 + objectScrollY;")
-replace(vox, "            const int packedY = std::clamp((int)std::lround(elev + 0.5f), -128, 127) + 128;", r'''            const float depthHeight = (tag.layer & 0x80u) && nativeCollisionLayer != 2
-                                          ? std::max(elev, PlayerContactDepth(entityCenterX, entityFootZ, pitch))
+replace(vox, "            const int packedY = std::clamp((int)std::lround(elev + 0.5f), -128, 127) + 128;", r'''            /* Keep indoor furniture and NPC art visible where their feet meet
+             * a collision-backed wall; native movement/collision stays intact. */
+            const float depthHeight = nativeCollisionLayer != 2 &&
+                                      (gArea.areaMetadata & AR_IS_OVERWORLD) == 0
+                                          ? std::max(elev, EntityContactDepth(entityCenterX, entityFootZ, pitch))
                                           : elev;
             const int packedY = std::clamp((int)std::lround(depthHeight), -128, 127) + 128;''')
 
@@ -346,6 +349,8 @@ replace(frag, "        uint entry = texelFetch(uMaps", "        ivec2 owner = iv
 replace(frag, "idx = bgTexel(entry, vParams.z,", "idx = bgTexel(entry, vParams.z & 65535u,")
 vert = port / "shaders/voxel.vert"
 region(vert, "        if ((aParams.w & 0x40000000u) != 0u) {", "        vec4 anchor =", "        // CPU chooses depth height only for contact with a real front face.\n")
+replace(vox, "/* Link: physical-feet depth + small camera allowance */",
+        "/* Link: shader keeps the player ahead of room geometry */")
 replace(vert,
         "        float anchorNdcDepth = anchor.z / anchor.w;\n        clip.z = anchorNdcDepth * clip.w;",
         """        if ((aParams.w & 0x40000000u) != 0u) {
