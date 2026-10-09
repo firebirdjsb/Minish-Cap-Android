@@ -324,39 +324,43 @@ static void townGroundFidelity() {
 }
 
 static void intrinsicGeometryLevels() {
+    // A 3x3 connected solid cliff should STILL be one tile tall. Native
+    // collision remains authoritative, not the inferred size of a run.
     resetScene(true, 8, 9);
-    // Connected blocked cliff gets height level two without changing the
-    // user's one-tile default or exposing any height controls.
     for (int x = 2; x <= 4; ++x)
         for (int y = 1; y <= 3; ++y)
             block(x, y);
     BuildMap();
-    bool twoLevels = false;
+    assert(sFrontCount > 0);
     for (int i = 0; i < sFrontCount; ++i)
-        if (sFrontFaces[i].height == 32.0f)
-            twoLevels = true;
-    assert(twoLevels);
+        assert(sFrontFaces[i].height <= 16.0f);
+    for (int y = 1; y <= 3; ++y)
+        for (int x = 2; x <= 4; ++x)
+            assert(sVoxelHeight[y * 64 + x] <= 16.0f);
 
+    // Even a 3x5 broad connected cliff must NOT be auto-promoted to
+    // two or three levels: it creates giant malformed facade panels.
     resetScene(true, 8, 10);
     for (int x = 2; x <= 4; ++x)
         for (int y = 1; y <= 5; ++y)
             block(x, y);
     BuildMap();
-    bool threeLevels = false;
+    assert(sFrontCount > 0);
     for (int i = 0; i < sFrontCount; ++i)
-        if (sFrontFaces[i].height == 48.0f)
-            threeLevels = true;
-    assert(threeLevels);
+        assert(sFrontFaces[i].height <= 16.0f);
+    for (int y = 1; y <= 5; ++y)
+        for (int x = 2; x <= 4; ++x)
+            assert(sVoxelHeight[y * 64 + x] <= 16.0f);
     assert(kDefaultWallTiles == 1);
 
+    // Doorway-specific geometry remains governed by the native doorway
+    // topology, and decorative walls cannot become false 32px arches.
     resetScene(false, 8, 10);
     for (int x = 2; x <= 4; ++x)
         for (int y = 0; y < 2; ++y)
             block(x, y);
     gMapBottom.mapData[3] = 0x3da;
     gMapBottom.mapData[64 + 3] = 0x91;
-    // Similar decorated brick wall, but NO native door passage: must not
-    // rotate its artwork into a 32px floating doorway glyph.
     BuildMap();
     for (int i = 0; i < sFrontCount; ++i)
         assert(sFrontFaces[i].height != 32.0f);
