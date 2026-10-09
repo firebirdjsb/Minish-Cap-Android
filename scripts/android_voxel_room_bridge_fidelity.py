@@ -44,13 +44,9 @@ patch(
                 gMapBottom.collisionData[3 * 64 + x] != 0x0f)
                 northDoorColumns[x] = true;""")
 
-# No duplicate raised side-door jamb art: only native 0x23 passable side
-# openings are turned onto the correct wall plane.
-patch(
-    """        return sideOpening(x, y) ||
-               (solid[t] && gMapBottom.collisionData[t] == 0x0f &&
-                (sideOpening(x, y - 1) || sideOpening(x, y + 1)));""",
-    """        return sideOpening(x, y); // adjacent jambs retain their native walls""")
+# Native side door jambs need two-column vertical art to preserve source
+# orientation. Retain the established sideFrameArt topology; flattening only
+# the passable centre breaks west/east room entrances and their tests.
 
 # A bridge deck is a long, narrow top-map band spanning WALKABLE bottom
 # tiles. Town ground, broad plaza overlays, houses and cliffs do not match.
