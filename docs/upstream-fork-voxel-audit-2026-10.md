@@ -72,3 +72,24 @@ documented rather than wholesale-merged.
 This is a compatibility survey, *not* a claim that all fork gameplay code has
 been dynamically exercised. Only ported work that passes Android CI should be
 described as built and tested.
+
+
+## October 9 on-device regression findings
+
+Fresh S24 Ultra screenshots confirmed the PR #210 and early bridge/room passes
+did **not** completely fix Hyrule Town artwork or indoor wall reconstruction.
+`scripts/android_voxel_scene_fidelity_v2.py` is a follow-up, not a final
+visual-fidelity guarantee. Its safeguards:
+
+- Recognize native overhead bridge decks without globally lifting plaza art.
+- Keep single-screen Link behind an actually elevated deck via GPU depth.
+- Draw only native doorway openings as side-door panels, not their solid
+  neighbouring jambs again.
+- Treat truly two-row indoor facade artwork as a wall only where both
+  native upper-map rows exist; otherwise preserve the one-tile default.
+- Render explicitly curated top-map props through a per-pixel silhouette when
+  their art is masked instead of extruding a rectangular block.
+- Native 2D tiles, movement, jump ledges and PR #219 OAM are untouched.
+
+New on-device checks required: flags, balloons, flower stands, house side doors,
+blacksmith's back wall/forge, and Link under Hyrule Town's bridge.
