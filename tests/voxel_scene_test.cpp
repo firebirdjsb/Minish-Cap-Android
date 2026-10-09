@@ -376,6 +376,54 @@ static void intrinsicGeometryLevels() {
         assert(sFrontFaces[i].height != 32.0f);
 }
 
+static void roomLoadNeverDisplaysHalfLoadedMap() {
+    voxel::RoomBootstrap b;
+
+    // A new room's bottom pointer may exist during a scroll transition,
+    // but neither its native BG nor its tile VRAM are ready yet.
+    for (int frame=0; frame<20; ++frame)
+        assert(!b.observe(false, true, false, 0xfeed));
+    assert(!b.ready && b.frames == 0);
+
+    // Bottom arrives before Hyrule's top layer: waiting must prevent the
+    // transient bare-beam/wooden scaffolding that the screenshot captured.
+    for (int frame=0; frame<20; ++frame)
+        assert(!b.observe(true, true, false, 0xabba));
+    assert(!b.ready);
+
+    // The top BG arrives, but VRAM/palette still changes in successive
+    // native loader frames. Count only consecutive stable graphics.
+    for (int frame=0; frame<6; ++frame)
+        assert(!b.observe(true, true, true, 1000 + frame));
+    for (int frame=0; frame<7; ++frame)
+        assert(!b.observe(true, true, true, 12345));
+    assert(b.observe(true, true, true, 12345));
+    assert(b.ready);
+
+    // A room without any top BG should not become stuck in 2D forever.
+    voxel::RoomBootstrap noTop;
+    for (int frame=0; frame<13; ++frame)
+        assert(!noTop.observe(true, false, false, 3));
+    assert(noTop.observe(true, false, false, 3));
+
+    // A layer that is configured but never drawn still falls back after
+    // an explicit grace period: no fabricated geometry from stale top art.
+    voxel::RoomBootstrap unusedTop;
+    for (int frame=0; frame<47; ++frame)
+        assert(!unusedTop.observe(true, true, false, 3));
+    assert(unusedTop.observe(true, true, false, 3));
+
+    // Animated scenes whose tiles change every game tick are bounded.
+    voxel::RoomBootstrap animated;
+    for (int frame=0; frame<95; ++frame)
+        assert(!animated.observe(true, true, true, frame + 1));
+    assert(animated.observe(true, true, true, 96));
+
+    b = {};
+    assert(!b.ready);
+    assert(!b.observe(false, true, true, 12345));
+}
+
 static void transitionsAndBindings() {
     voxel::LayerBinding b;
     b.observe(1, 4, true);
@@ -713,6 +761,7 @@ int main() {
     townGroundFidelity();
     intrinsicGeometryLevels();
     transitionsAndBindings();
+    roomLoadNeverDisplaysHalfLoadedMap();
     movementAndOcclusion();
     offscreenOamVisibility();
     pr210CuratedTileShapes();
