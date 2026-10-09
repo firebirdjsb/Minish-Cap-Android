@@ -19,12 +19,23 @@ def change(old,new):
 # Do not take an empty patch of carpet/paint on an indoor wall and reproject
 # it onto the plane belonging to a *different* row or a jamb. Render true
 # side-door opening at x=0/W-1 once; adjacent solid wall stays wallV/sideV.
-change(
-    """        return !solid[y * 64 + x] ||
-               !solid[(y - 1) * 64 + x] || !solid[(y + 1) * 64 + x];""",
-    """        const int t = y * 64 + x;
+# In the fully transformed renderer sideFrameArt is a short lambda.
+# Match its END within the lambda, not the older source text's exact
+# indentation; the earlier room and side-door passes may reformat it.
+import re
+p=src.index("    auto sideFrameArt = ")
+q=src.index("\n    };",p)
+chunk=src[p:q]
+newChunk,n=re.subn(
+    r"return\s+!solid\[y\s*\*\s*64\s*\+\s*x\].*?;",
+    """const int t = y * 64 + x;
         return !solid[t] && gMapBottom.collisionData[t] == 0x23 &&
-               solid[t - 64] && solid[t + 64];""")
+               solid[t-64] && solid[t+64];""",
+    chunk, count=1, flags=re.S)
+if n!=1:
+    raise SystemExit("sideFrameArt source mismatch: "+repr(chunk[-450:]))
+src=src[:p]+newChunk+src[q:]
+
 
 # Only use the special side door draw for passable room openings, not
 # already-generated solid wall/corner tiles. Those duplicated UV panels
