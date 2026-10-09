@@ -163,4 +163,21 @@ patch(
         return groundX >= 0;""")
 
 path.write_text(src, encoding="utf-8")
+
+# Bit30 tags authentic overhead span quads. The PR210 wall dither is for
+# obstructing solid walls; perforating a bridge deck makes Link appear ON it
+# and produces the large dark Bayer circle seen in Hyrule Town.
+frag=Path(__file__).resolve().parents[1]/"upstream/tmc/port/shaders/voxel.frag"
+shader=frag.read_text(encoding="utf-8")
+anchor="""float roomFadeKeep() {
+    if (uFadeCamera.w < 0.5) return 1.0;"""
+if shader.count(anchor)!=1:
+    raise SystemExit("bridge: PR210 shader dither anchor missing")
+shader=shader.replace(anchor, """float roomFadeKeep() {
+    // Link's native bottom collision layer is UNDER overhead BG2 bridges.
+    // Preserve opaque depth occlusion: only actual walls can be dithered.
+    if ((vParams.w & 0x40000000u) != 0u) return 1.0;
+    if (uFadeCamera.w < 0.5) return 1.0;""", 1)
+frag.write_text(shader, encoding="utf-8")
+
 print("Native indoor BG/art preserved; doorway glyph columns unpromoted; overhead bridge and local Hyrule ground fixed")
