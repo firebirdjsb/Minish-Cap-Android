@@ -297,7 +297,7 @@ static void townGroundFidelity() {
     tile(gMapDataTopSpecial, 3, 3, 2);
     tile(gMapDataTopSpecial, 4, 3, 2);
     BuildMap();
-    bool topOnFloor = false, skirtUsesGrass = false, skirtCarriesStone = false;
+    bool topOnFloor = false, skirtUsesGrass = false, skirtUsesPlaza = false, skirtCarriesStone = false;
     for (int i = 0; i < sMapVertCount; i += 6) {
         const auto& q = sMapVerts[i];
         const int tx = (q.p[2] >> 16) & 63, ty = (q.p[2] >> 22) & 63;
@@ -313,11 +313,13 @@ static void townGroundFidelity() {
         if (q.p[0] == 0 && q.p[1] == 0 &&
             q.pos[0] < 0 && q.pos[2] >= 32 && q.pos[2] < 96) {
             assert(tx < 8 && ty < 8);
-            assert(gMapBottom.mapData[ty * 64 + tx] == 0); // resetScene uses native tile index zero as perimeter grass
-            skirtUsesGrass = true;
+            const u16 material = gMapBottom.mapData[ty * 64 + tx];
+            assert(material == 0 || material == 2);
+            skirtUsesGrass |= material == 0;
+            skirtUsesPlaza |= material == 2;
         }
     }
-    assert(topOnFloor && skirtUsesGrass && skirtCarriesStone);
+    assert(topOnFloor && skirtUsesGrass && skirtUsesPlaza && skirtCarriesStone);
     assert(kDefaultWallTiles == 1);
 }
 
