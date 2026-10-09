@@ -571,8 +571,10 @@ static void fullNativeNorthWall() {
     // a duplicated horizontal roof stripe and the room lost wall furniture.
     resetScene(false, 8, 10);
     for (int x = 0; x < 8; ++x)
-        for (int y = 0; y < 2; ++y)
+        for (int y = 0; y < 2; ++y) {
             block(x, y);
+            tile(gMapDataTopSpecial, x, y, 2); // authentic two-row BG2 facade art
+        }
     BuildMap();
     bool rows[2] = {};
     for (int i = 0; i < sMapVertCount; i += 6) {
