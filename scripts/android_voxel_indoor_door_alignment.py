@@ -46,6 +46,24 @@ if part.count(old2)!=2:
 part=part.replace(old2,"tx0, y * 16.0f, tx1, y * 16.0f + 16")
 s=s[:a]+part+s[b:]
 
+# The earlier pass drew only one source column (sometimes twice) while
+# the other column stayed on the floor. Remove those incomplete drawings;
+# the paired-door pass below is the one visual owner for BOTH halves.
+patch("""            if (sideOpening(x, y)) {
+                underlay(x, y);
+                sideDoor(x, y, x >= W - 2, false);
+                if (Cover(x, y))
+                    sideDoor(x, y, x >= W - 2, true);
+                continue;""",
+"""            if (sideOpening(x, y)) {
+                underlay(x, y); // native doorway remains passable
+                continue;""")
+patch("""    for (int y = 2; y < H - 2; ++y)
+        for (int x = 0; x < W; ++x)
+            if (kind[y * 64 + x] != 0 && !solid[y * 64 + x] &&
+                sideFrameArt(x, y))
+                sideDoor(x, y, x >= W - 2, true);""", "")
+
 patch("""    sMapVertCount = n;
     sBuildShapes = nullptr;""",
 """    /* Side doorway visual 2D X columns become the two 3D vertical jamb
