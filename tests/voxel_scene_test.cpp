@@ -274,6 +274,40 @@ static void ledgeAndCapacity() {
     assert(sMapVertCount > 0 && sMapVertCount < kMaxMapVerts - 6);
 }
 
+static void townGroundFidelity() {
+    // Plaza colour is the most common walkable tile, but the town outskirts
+    // are grass. The 3D distance skirt must use the local edge grass rather
+    // than cloning the plaza beyond the buildings.
+    resetScene(true, 8, 8);
+    for (int y = 1; y <= 6; ++y)
+        for (int x = 1; x <= 6; ++x) {
+            gMapBottom.mapData[y * 64 + x] = 2;
+            tile(gMapDataBottomSpecial, x, y, 2);
+        }
+    // An opaque top BG painted over a walkable plaza square belongs on its
+    // native floor; it must never become a floating one-tile-high platform.
+    tile(gMapDataTopSpecial, 3, 3, 2);
+    tile(gMapDataTopSpecial, 4, 3, 2);
+    BuildMap();
+    bool topOnFloor = false, skirtUsesGrass = false;
+    for (int i = 0; i < sMapVertCount; i += 6) {
+        const auto& q = sMapVerts[i];
+        const int tx = (q.p[2] >> 16) & 63, ty = (q.p[2] >> 22) & 63;
+        if (q.p[0] == 0 && q.p[1] == 128 && tx == 3 && ty == 3) {
+            assert(q.pos[1] >= 0 && q.pos[1] < 2.0f);
+            topOnFloor = true;
+        }
+        if (q.p[0] == 0 && q.p[1] == 0 &&
+            q.pos[0] < 0 && q.pos[2] >= 32 && q.pos[2] < 96) {
+            assert(tx < 8 && ty < 8);
+            assert(gMapBottom.mapData[ty * 64 + tx] == 1);
+            skirtUsesGrass = true;
+        }
+    }
+    assert(topOnFloor && skirtUsesGrass);
+    assert(kDefaultWallTiles == 1);
+}
+
 static void transitionsAndBindings() {
     voxel::LayerBinding b;
     b.observe(1, 4, true);
@@ -379,6 +413,7 @@ int main() {
     longIndoorSideWall();
     twoRowDoorframes();
     ledgeAndCapacity();
+    townGroundFidelity();
     transitionsAndBindings();
     movementAndOcclusion();
     aspects();
