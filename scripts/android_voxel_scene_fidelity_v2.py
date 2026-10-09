@@ -27,10 +27,8 @@ p=src.index("    auto sideFrameArt = ")
 q=src.index("\n    };",p)
 chunk=src[p:q]
 newChunk,n=re.subn(
-    r"return\s+!solid\[y\s*\*\s*64\s*\+\s*x\].*?;",
-    """const int t = y * 64 + x;
-        return !solid[t] && gMapBottom.collisionData[t] == 0x23 &&
-               solid[t-64] && solid[t+64];""",
+    r"return\s+sideOpening\(x, y\)\s*\|\|.*?;",
+    """return sideOpening(x, y);""",
     chunk, count=1, flags=re.S)
 if n!=1:
     raise SystemExit("sideFrameArt source mismatch: "+repr(chunk[-450:]))
