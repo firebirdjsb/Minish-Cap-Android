@@ -448,6 +448,39 @@ static void movementAndOcclusion() {
     assert(!Port_Voxel_AssistPlayerMovement(oldX, oldZ, &nx, &nz));
 }
 
+static void offscreenOamVisibility() {
+    // Upstream PR #219: draw across a 256px top/side 3D margin, and never
+    // spend offscreen OAM while native 2D mode is presenting.
+    for (int width : {240, 320, 512, 576}) {
+        assert(Port_Voxel_PieceVisible3D(-256, -256, 16, width));
+        assert(Port_Voxel_PieceVisible3D(width + 255, 16, 16, width));
+        assert(Port_Voxel_PieceVisible3D(20, -200, 16, width));
+        assert(!Port_Voxel_PieceVisible3D(-273, 0, 16, width));
+        assert(!Port_Voxel_PieceVisible3D(width + 256, 0, 16, width));
+        assert(!Port_Voxel_PieceVisible3D(15, -257, 16, width));
+        assert(!Port_Voxel_PieceVisible3D(15, 160, 16, width));
+        assert(Port_Voxel_PieceNeedsParking(20, -97, width));
+        assert(!Port_Voxel_PieceNeedsParking(20, -96, width));
+        assert(!Port_Voxel_PieceNeedsParking(20, 0, width));
+    }
+    // GBA x is stored as 9 bits. At 576px native output, negative coords
+    // and coords > 511 alias a *different* valid x unless parked.
+    assert(Port_Voxel_PieceNeedsParking(-20, 0, 576));
+    assert(Port_Voxel_PieceNeedsParking(512, 0, 576));
+    assert(!Port_Voxel_PieceNeedsParking(511, 0, 576));
+    assert(!Port_Voxel_PieceNeedsParking(-20, 0, 240));
+    assert(Port_Voxel_PieceNeedsParking(-300, 0, 240));
+    assert(Port_Voxel_PieceNeedsParking(240, 0, 240));
+    // Even if last frame was 3D, turning off the setting prevents expansion.
+    sDrewVoxelLastFrame = true;
+    voxelEnabled = false;
+    assert(!Port_Voxel_IsDrawing());
+    voxelEnabled = true;
+    assert(Port_Voxel_IsDrawing());
+    sDrewVoxelLastFrame = false;
+    assert(!Port_Voxel_IsDrawing());
+}
+
 static void aspects() {
     for (float aspect : {1.5f, 16.0f/9, 21.0f/9, 32.0f/9, 3120.0f/1440}) {
         for (auto size : {std::pair{3120, 1440}, std::pair{960, 540}, std::pair{800, 600}}) {
@@ -471,6 +504,7 @@ int main() {
     intrinsicGeometryLevels();
     transitionsAndBindings();
     movementAndOcclusion();
+    offscreenOamVisibility();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
 }
