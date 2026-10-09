@@ -485,6 +485,24 @@ static void offscreenOamVisibility() {
     assert(!Port_Voxel_IsDrawing());
 }
 
+static void pr210CuratedTileShapes() {
+    // Curated classifications from tmc PR #210 ship as embedded defaults.
+    // They must never restore the old per-area two/three-tile wall height.
+    sShapesLoaded = false;
+    sShapes.clear();
+    LoadShapes();
+    assert(sShapes.size() >= 59);
+    size_t classified = 0;
+    for (const auto& [area, shape] : sShapes) {
+        assert(shape.wall == kDefaultWallTiles);
+        classified += shape.tiles.size();
+    }
+    assert(classified >= 510);
+    assert(sShapes.at(0).tiles.at(63) == PORT_VOXEL_SHAPE_PROP);
+    assert(sShapes.at(0).tiles.at(123) == PORT_VOXEL_SHAPE_BLOCK);
+    assert(kDefaultWallTiles == 1);
+}
+
 static void aspects() {
     for (float aspect : {1.5f, 16.0f/9, 21.0f/9, 32.0f/9, 3120.0f/1440}) {
         for (auto size : {std::pair{3120, 1440}, std::pair{960, 540}, std::pair{800, 600}}) {
@@ -509,6 +527,7 @@ int main() {
     transitionsAndBindings();
     movementAndOcclusion();
     offscreenOamVisibility();
+    pr210CuratedTileShapes();
     aspects();
     std::cout << "voxel scene regression tour passed (BuildMap, room transitions, movement, occlusion, aspects)\n";
 }
