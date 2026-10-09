@@ -245,7 +245,7 @@ static void GatherFadeActors(PortVoxelFade& fade) {
 
 PortVoxelTileAhead Port_Voxel_TileAhead(void) {''')
 patch(voxel,
-    '''        /* Backdrop: BG3 stretched over the whole target at the far plane. */''',
+    '''        float aspect = (float)tw / th;''',
     '''        /* The 3D pass owns wall fade. Push before drawing the first quad
          * and again for each drawTo (screen and screenshot). Set disabled
          * when the user turns the switch off; 2D never executes this path. */
@@ -268,6 +268,6 @@ patch(voxel,
             GatherFadeActors(fade);
         SDL_PushGPUFragmentUniformData(cmd, 0, &fade, sizeof(fade));
 
-        /* Backdrop: BG3 stretched over the whole target at the far plane. */''')
+        float aspect = (float)tw / th;''')
 
 print(f"Applied selective PR #210: {len(entries)} per-area shape defaults, 3D-only wall dither and an Android toggle")
