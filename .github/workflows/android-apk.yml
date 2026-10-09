@@ -40,8 +40,13 @@ jobs:
       - name: Install voxel shader compiler
         shell: bash
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y glslang-tools ripgrep g++
+          # Hosted runners generally have usable apt lists already. Avoid
+          # hanging for minutes in a mirror refresh before source compilation.
+          if ! sudo timeout -k 5 120s apt-get install -y -o Acquire::Retries=2 glslang-tools ripgrep g++; then
+            echo "Cached apt lists incomplete; refreshing with a bounded timeout"
+            sudo timeout -k 5 90s apt-get update -qq
+            sudo timeout -k 5 120s apt-get install -y -o Acquire::Retries=2 glslang-tools ripgrep g++
+          fi
 
       - name: Prepare patched upstream
         shell: bash
