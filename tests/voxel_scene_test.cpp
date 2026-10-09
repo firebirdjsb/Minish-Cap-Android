@@ -514,6 +514,7 @@ static void nativeJumpEdgesAndScenery() {
     gMapBottom.tileTypes[2] = 28; // small native grass / cut bush art
     gMapBottom.mapData[2 * 64 + 2] = 2;
     block(2, 2);
+    block(3, 2); // neighbouring collision wall must not turn grass into a cube
     sShapes[0].tiles[28] = PORT_VOXEL_SHAPE_BLOCK;
     BuildMap();
     assert(sVoxelHeight[2 * 64 + 2] == 0.0f); // no erroneous cube
